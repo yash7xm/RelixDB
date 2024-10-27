@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"log"
 )
@@ -110,4 +111,24 @@ func (node BNode) getVal(idx uint16) []byte {
 // node size in bytes
 func (node BNode) nbytes() uint16 {
 	return node.kvPos(node.nkeys())
+}
+
+// Returns the first kid node whose range intersects the key. (kid[i] <= key)
+// TODO: bisect
+func nodeLookupLE(node BNode, key []byte) uint16 {
+	nKeys := node.nkeys()
+	found := uint16(0)
+	// the first key is the copy from the parent node,
+	// thus it's always less than or equal to the key.
+	for i := uint16(1); i <= nKeys; i++ {
+		cmp := bytes.Compare(node.getKey(i), key)
+		if cmp <= 0 {
+			found = i
+		}
+		if cmp >= 0 {
+			break
+		}
+	}
+
+	return found
 }
