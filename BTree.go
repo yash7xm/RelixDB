@@ -231,7 +231,7 @@ func nodeInsert(tree *BTree, new BNode, node BNode, idx uint16, key []byte, val 
 	// split the result
 	nsplit, splited := nodeSplit3(knode)
 	// // update the kid links
-	// nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
+	nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
 }
 
 // split a bigger-than-allowed node into two.
@@ -261,4 +261,15 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	nodeSplit2(leftleft, middle, left)
 	assert(leftleft.nbytes() <= BTREE_PAGE_SIZE, "Left page size is greater than desired")
 	return 3, [3]BNode{leftleft, middle, right}
+}
+
+// replace a link with multiple links
+func nodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kids ...BNode) {
+	inc := uint16(len(kids))
+	new.setHeader(BNODE_NODE, old.nkeys()+inc-1)
+	nodeAppendRange(new, old, 0, 0, idx)
+	for i, node := range kids {
+		nodeAppendKV(new, idx+uint16(i), tree.new(node), node.getKey(0), nil)
+	}
+	nodeAppendRange(new, old, idx+inc, idx+1, old.nkeys()-(idx+1))
 }
