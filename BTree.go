@@ -315,6 +315,30 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 
 	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
 	// check for merging
+	mergeDir, sibling := shouldMerge(tree, node, idx, updated)
+	switch {
+	case mergeDir < 0: // left
+		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		nodeMerge(merged, sibling, updated)
+		tree.del(node.getPtr(idx - 1))
+		// nodeReplace2Kid(new, node, idx - 1, tree.new(merged), merged.getKey(0))
+	case mergeDir > 0: // right
+		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		nodeMerge(merged, updated, sibling)
+		tree.del(node.getPtr(idx + 1))
+		// nodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
+	case mergeDir == 0:
+		assert(updated.nkeys() > 0, "can't merge")
+		nodeReplaceKidN(tree, new, node, idx, updated)
+	}
+	return new
+}
+
+// merge two nodes into 1
+func nodeMerge(new BNode, left BNode, right BNode) {
+	new.setHeader(left.btype(), left.nkeys()+right.nkeys())
+	nodeAppendRange(new, left, 0, 0, left.nkeys())
+	nodeAppendRange(new, right, left.nkeys(), 0, right.nkeys())
 }
 
 // should the updated node be merged with a sibling?
