@@ -41,3 +41,22 @@ func TestBTreeInsertDuplicate(t *testing.T) {
     assert.Contains(t, c.ref, "apple", "Expected 'apple' to still exist in B-Tree")
 }
 
+func TestBTreeDelete(t *testing.T) {
+    c := newC()
+
+    // Insert some key-value pairs
+    c.add("apple", "red")
+    c.add("banana", "yellow")
+
+    // Delete a key
+    success := c.del("apple")
+    assert.True(t, success, "Expected successful deletion of 'apple'")
+
+    // Verify the key has been removed from the reference map
+    assert.NotContains(t, c.ref, "apple", "Expected 'apple' to be deleted from reference map")
+
+    // Ensure the other key still exists
+    assert.Contains(t, c.ref, "banana", "Expected 'banana' to still exist in B-Tree")
+}
+
+
