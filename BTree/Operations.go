@@ -6,6 +6,67 @@ import (
 	"unsafe"
 )
 
+// interface for inserting
+func (tree *BTree) Insert(key []byte, val []byte) {
+	Assert(len(key) != 0, "key is not provided")
+	Assert(len(key) <= BTREE_MAX_KEY_SIZE, "key provided exccedes the max size")
+	Assert(len(val) <= BTREE_MAX_VAL_SIZE, "val provided exccedes the max size")
+
+	if tree.root == 0 {
+		// create the first node
+		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		root.setHeader(BNODE_LEAF, 2)
+		// a dummy key, this makes the tree cover the whole key space.
+		// thus a lookup can always find a containg node..
+		nodeAppendKV(root, 0, 0, nil, nil)
+		nodeAppendKV(root, 1, 0, key, val)
+		tree.root = tree.new(root)
+		return
+	}
+
+	node := tree.get(tree.root)
+	tree.del(tree.root)
+
+	node = treeInsert(tree, node, key, val)
+	nsplit, splitted := nodeSplit3(node)
+	if nsplit > 1 {
+		// the root was split, add a new level.
+		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		root.setHeader(BNODE_NODE, nsplit)
+		for i, knode := range splitted[:nsplit] {
+			ptr, key := tree.new(knode), knode.getKey(0)
+			nodeAppendKV(root, uint16(i), ptr, key, nil)
+		}
+		tree.root = tree.new(root)
+	} else {
+		tree.root = tree.new(splitted[0])
+	}
+}
+
+// interface for deletion
+func (tree *BTree) Delete(key []byte) bool {
+	Assert(len(key) != 0, "key is not valid")
+	Assert(len(key) <= BTREE_PAGE_SIZE, "key is not valid")
+	if tree.root == 0 {
+		return false
+	}
+
+	updated := treeDelete(tree, tree.get(tree.root), key)
+	if len(updated.data) == 0 {
+		return false // not found
+	}
+
+	tree.del(tree.root)
+	if updated.btype() == BNODE_NODE && updated.nkeys() == 1 {
+		// remove a level
+		tree.root = updated.getPtr(0)
+	} else {
+		tree.root = tree.new(updated)
+	}
+
+	return true
+}
+
 // Returns the first kid node whose range intersects the key. (kid[i] <= key)
 // TODO: bisect
 func nodeLookupLE(node BNode, key []byte) uint16 {
@@ -26,12 +87,65 @@ func nodeLookupLE(node BNode, key []byte) uint16 {
 	return found
 }
 
+// insert a KV into a node, the result might be split into 2 nodes.
+// the caller is responsible for deallocating the input node
+// and splitting and allocating result nodes.
+func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
+	// the result node
+	// it's allowed to be bigger than 1 page and will be split if so
+	new := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
+
+	// where to insert the key?
+	idx := nodeLookupLE(node, key)
+	// act depending on the node type
+	switch node.btype() {
+	case BNODE_LEAF:
+		// leaf, node.getKey(idx) <= key
+		if bytes.Equal(key, node.getKey(idx)) {
+			// found the key update it.
+			leafUpdate(new, node, idx, key, val)
+		} else {
+			// insert it after the position.
+			leafInsert(new, node, idx+1, key, val)
+		}
+	case BNODE_NODE:
+		// internal node insert it to a kid node.
+		nodeInsert(tree, new, node, idx, key, val)
+	default:
+		panic("bad node!")
+	}
+
+	return new
+}
+
 // add a new key to a leaf node
 func leafInsert(new BNode, old BNode, idx uint16, key []byte, val []byte) {
 	new.setHeader(BNODE_LEAF, old.nkeys()+1)
 	nodeAppendRange(new, old, 0, 0, idx)
 	nodeAppendKV(new, idx, 0, key, val)
 	nodeAppendRange(new, old, idx+1, idx, old.nkeys()-idx)
+}
+
+// update a key
+func leafUpdate(new BNode, old BNode, idx uint16, key []byte, val []byte) {
+	new.setHeader(BNODE_LEAF, old.nkeys())
+	nodeAppendRange(new, old, 0, 0, idx-1)
+	nodeAppendKV(new, idx, 0, key, val)
+	nodeAppendRange(new, old, idx+1, idx, old.nkeys()-(idx+1))
+}
+
+// part of the treeInsert(): KV insertion to an internal node
+func nodeInsert(tree *BTree, new BNode, node BNode, idx uint16, key []byte, val []byte) {
+	// get and deallocate the kid node
+	kptr := node.getPtr(idx)
+	knode := tree.get(kptr)
+	tree.del(kptr)
+	// recursive insertion to the kid node
+	knode = treeInsert(tree, knode, key, val)
+	// split the result
+	nsplit, splited := nodeSplit3(knode)
+	// // update the kid links
+	nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
 }
 
 func nodeAppendRange(new BNode, old BNode, dstNew uint16, srcOld uint16, n uint16) {
@@ -73,59 +187,6 @@ func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
 	copy(new.data[pos+4+uint16(len(key)):], val)
 	// the offset of the next key
 	new.setOffset(idx+1, new.getOffset(idx)+4+uint16((len(key)+len(val))))
-}
-
-// update a key
-func leafUpdate(new BNode, old BNode, idx uint16, key []byte, val []byte) {
-	new.setHeader(BNODE_LEAF, old.nkeys())
-	nodeAppendRange(new, old, 0, 0, idx-1)
-	nodeAppendKV(new, idx, 0, key, val)
-	nodeAppendRange(new, old, idx+1, idx, old.nkeys()-(idx+1))
-}
-
-// insert a KV into a node, the result might be split into 2 nodes.
-// the caller is responsible for deallocating the input node
-// and splitting and allocating result nodes.
-func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
-	// the result node
-	// it's allowed to be bigger than 1 page and will be split if so
-	new := BNode{data: make([]byte, 2*BTREE_PAGE_SIZE)}
-
-	// where to insert the key?
-	idx := nodeLookupLE(node, key)
-	// act depending on the node type
-	switch node.btype() {
-	case BNODE_LEAF:
-		// leaf, node.getKey(idx) <= key
-		if bytes.Equal(key, node.getKey(idx)) {
-			// found the key update it.
-			leafUpdate(new, node, idx, key, val)
-		} else {
-			// insert it after the position.
-			leafInsert(new, node, idx+1, key, val)
-		}
-	case BNODE_NODE:
-		// internal node insert it to a kid node.
-		nodeInsert(tree, new, node, idx, key, val)
-	default:
-		panic("bad node!")
-	}
-
-	return new
-}
-
-// part of the treeInsert(): KV insertion to an internal node
-func nodeInsert(tree *BTree, new BNode, node BNode, idx uint16, key []byte, val []byte) {
-	// get and deallocate the kid node
-	kptr := node.getPtr(idx)
-	knode := tree.get(kptr)
-	tree.del(kptr)
-	// recursive insertion to the kid node
-	knode = treeInsert(tree, knode, key, val)
-	// split the result
-	nsplit, splited := nodeSplit3(knode)
-	// // update the kid links
-	nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
 }
 
 // Split a node into two. The first node 'left' can still be bigger than one page,
@@ -181,13 +242,6 @@ func nodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kids ...BNod
 	nodeAppendRange(new, old, idx+inc, idx+1, old.nkeys()-(idx+1))
 }
 
-// remove a key from leaf node
-func leafDelete(new BNode, old BNode, idx uint16) {
-	new.setHeader(BNODE_LEAF, old.nkeys()-1)
-	nodeAppendRange(new, old, 0, 0, idx)
-	nodeAppendRange(new, old, idx, idx+1, old.nkeys()-(idx+1))
-}
-
 // delete a key from the tree
 func treeDelete(tree *BTree, node BNode, key []byte) BNode {
 	// where to find the key?
@@ -208,6 +262,13 @@ func treeDelete(tree *BTree, node BNode, key []byte) BNode {
 	default:
 		panic("bad node!")
 	}
+}
+
+// remove a key from leaf node
+func leafDelete(new BNode, old BNode, idx uint16) {
+	new.setHeader(BNODE_LEAF, old.nkeys()-1)
+	nodeAppendRange(new, old, 0, 0, idx)
+	nodeAppendRange(new, old, idx, idx+1, old.nkeys()-(idx+1))
 }
 
 // part of the treeDelete()
@@ -284,67 +345,6 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 		}
 	}
 	return 0, BNode{}
-}
-
-// interface for deletion
-func (tree *BTree) Delete(key []byte) bool {
-	Assert(len(key) != 0, "key is not valid")
-	Assert(len(key) <= BTREE_PAGE_SIZE, "key is not valid")
-	if tree.root == 0 {
-		return false
-	}
-
-	updated := treeDelete(tree, tree.get(tree.root), key)
-	if len(updated.data) == 0 {
-		return false // not found
-	}
-
-	tree.del(tree.root)
-	if updated.btype() == BNODE_NODE && updated.nkeys() == 1 {
-		// remove a level
-		tree.root = updated.getPtr(0)
-	} else {
-		tree.root = tree.new(updated)
-	}
-
-	return true
-}
-
-// interface for inserting
-func (tree *BTree) Insert(key []byte, val []byte) {
-	Assert(len(key) != 0, "key is not provided")
-	Assert(len(key) <= BTREE_MAX_KEY_SIZE, "key provided exccedes the max size")
-	Assert(len(val) <= BTREE_MAX_VAL_SIZE, "val provided exccedes the max size")
-
-	if tree.root == 0 {
-		// create the first node
-		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
-		root.setHeader(BNODE_LEAF, 2)
-		// a dummy key, this makes the tree cover the whole key space.
-		// thus a lookup can always find a containg node..
-		nodeAppendKV(root, 0, 0, nil, nil)
-		nodeAppendKV(root, 1, 0, key, val)
-		tree.root = tree.new(root)
-		return
-	}
-
-	node := tree.get(tree.root)
-	tree.del(tree.root)
-
-	node = treeInsert(tree, node, key, val)
-	nsplit, splitted := nodeSplit3(node)
-	if nsplit > 1 {
-		// the root was split, add a new level.
-		root := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
-		root.setHeader(BNODE_NODE, nsplit)
-		for i, knode := range splitted[:nsplit] {
-			ptr, key := tree.new(knode), knode.getKey(0)
-			nodeAppendKV(root, uint16(i), ptr, key, nil)
-		}
-		tree.root = tree.new(root)
-	} else {
-		tree.root = tree.new(splitted[0])
-	}
 }
 
 type C struct {
