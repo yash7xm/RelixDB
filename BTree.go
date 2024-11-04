@@ -185,9 +185,10 @@ func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
 
 // update a key
 func leafUpdate(new BNode, old BNode, idx uint16, key []byte, val []byte) {
-	nodeAppendRange(new, old, 0, 0, idx)
+	new.setHeader(BNODE_LEAF, old.nkeys())
+	nodeAppendRange(new, old, 0, 0, idx-1)
 	nodeAppendKV(new, idx, 0, key, val)
-	nodeAppendRange(new, old, idx+1, idx, old.nkeys()-idx)
+	nodeAppendRange(new, old, idx+1, idx, old.nkeys()-(idx+1))
 }
 
 // insert a KV into a node, the result might be split into 2 nodes.
