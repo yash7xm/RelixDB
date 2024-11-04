@@ -60,3 +60,12 @@ func TestBTreeDelete(t *testing.T) {
 }
 
 
+func TestBTreeDeleteNonExistentKey(t *testing.T) {
+    c := newC()
+
+    // Try deleting a key that doesn't exist
+    success := c.del("orange")
+    assert.False(t, success, "Expected deletion of 'orange' to fail")
+}
+
+
