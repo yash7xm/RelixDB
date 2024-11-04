@@ -227,9 +227,38 @@ func nodeInsert(tree *BTree, new BNode, node BNode, idx uint16, key []byte, val 
 	knode := tree.get(kptr)
 	tree.del(kptr)
 	// recursive insertion to the kid node
-	knode  = treeInsert(tree, knode, key, val)
+	knode = treeInsert(tree, knode, key, val)
 	// split the result
-	// nsplit, splited := nodeSplit3(knode)
+	nsplit, splited := nodeSplit3(knode)
 	// // update the kid links
 	// nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
+}
+
+// split a bigger-than-allowed node into two.
+// the second node always fits on a page.
+func nodeSplit2(left BNode, right BNode, old BNode) {
+	// code omitted...
+	left.data = old.data[:old.nbytes()-BTREE_PAGE_SIZE]
+	right.data = old.data[old.nbytes()-BTREE_PAGE_SIZE : old.nbytes()]
+}
+
+// split a node if it's too big. the results are 1~3 nodes.
+func nodeSplit3(old BNode) (uint16, [3]BNode) {
+	if old.nbytes() <= BTREE_PAGE_SIZE {
+		old.data = old.data[:BTREE_PAGE_SIZE]
+		return 1, [3]BNode{old}
+	}
+	left := BNode{make([]byte, 2*BTREE_PAGE_SIZE)} // might be split later
+	right := BNode{make([]byte, 2*BTREE_PAGE_SIZE)}
+	nodeSplit2(left, right, old)
+	if left.nbytes() <= BTREE_PAGE_SIZE {
+		left.data = left.data[:BTREE_PAGE_SIZE]
+		return 2, [3]BNode{left, right}
+	}
+	// the left node is still too large
+	leftleft := BNode{make([]byte, BTREE_PAGE_SIZE)}
+	middle := BNode{make([]byte, BTREE_PAGE_SIZE)}
+	nodeSplit2(leftleft, middle, left)
+	assert(leftleft.nbytes() <= BTREE_PAGE_SIZE, "Left page size is greater than desired")
+	return 3, [3]BNode{leftleft, middle, right}
 }
