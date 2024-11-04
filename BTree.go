@@ -274,9 +274,31 @@ func nodeReplaceKidN(tree *BTree, new BNode, old BNode, idx uint16, kids ...BNod
 	nodeAppendRange(new, old, idx+inc, idx+1, old.nkeys()-(idx+1))
 }
 
-// Remove a key from leaf node
+// remove a key from leaf node
 func leafDelete(new BNode, old BNode, idx uint16) {
 	new.setHeader(BNODE_LEAF, old.nkeys()-1)
 	nodeAppendRange(new, old, 0, 0, idx)
 	nodeAppendRange(new, old, idx, idx+1, old.nkeys()-(idx+1))
+}
+
+// delete a key from the tree
+func treeDelete(tree *BTree, node BNode, key []byte) BNode {
+	// where to find the key?
+	idx := nodeLookupLE(node, key)
+	// act depending on the node type
+	switch node.btype() {
+	case BNODE_LEAF:
+		if !bytes.Equal(key, node.getKey(idx)) {
+			return BNode{} // not found
+		}
+
+		// delete the key in leaf node
+		new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+		leafDelete(new, node, idx)
+		return new
+	case BNODE_NODE:
+		// return nodeDelete(tree, node, idx, key)
+	default:
+		panic("bad node!")
+	}
 }
