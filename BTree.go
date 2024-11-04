@@ -37,8 +37,8 @@ func init() {
 	}
 }
 
-// Implementing an assert function
-func assert(cond bool, msg string) {
+// Implementing an Assert function
+func Assert(cond bool, msg string) {
 	if !cond {
 		log.Fatalf("Assertion failed: %s", msg)
 	}
@@ -60,20 +60,20 @@ func (node BNode) setHeader(btype uint16, nkeys uint16) {
 
 // pointers
 func (node BNode) getPtr(idx uint16) uint64 {
-	assert(idx < node.nkeys(), "Index out of bounds in getPtr")
+	Assert(idx < node.nkeys(), "Index out of bounds in getPtr")
 	pos := HEADER + 8*int(idx)
 	return binary.LittleEndian.Uint64(node.data[pos:])
 }
 
 func (node BNode) setPtr(idx uint16, val uint64) {
-	assert(idx < node.nkeys(), "Index out of bounds in setPtr")
+	Assert(idx < node.nkeys(), "Index out of bounds in setPtr")
 	pos := HEADER + 8*int(idx)
 	binary.LittleEndian.PutUint64(node.data[pos:], val)
 }
 
 // offset list
 func offsetPos(node BNode, idx uint16) uint16 {
-	assert(1 <= idx && idx <= node.nkeys(), "Index out of bounds in offsetPos")
+	Assert(1 <= idx && idx <= node.nkeys(), "Index out of bounds in offsetPos")
 	return HEADER + 8*node.nkeys() + 2*(idx-1)
 }
 
@@ -90,19 +90,19 @@ func (node BNode) setOffset(idx uint16, offset uint16) {
 
 // key-values
 func (node BNode) kvPos(idx uint16) uint16 {
-	assert(idx <= node.nkeys(), "Index out of bounds in kvPos")
+	Assert(idx <= node.nkeys(), "Index out of bounds in kvPos")
 	return HEADER + 8*node.nkeys() + 2*node.nkeys() + node.getOffset(idx)
 }
 
 func (node BNode) getKey(idx uint16) []byte {
-	assert(idx < node.nkeys(), "Index out of bounds in getKey")
+	Assert(idx < node.nkeys(), "Index out of bounds in getKey")
 	pos := node.kvPos(idx)
 	klen := binary.LittleEndian.Uint16(node.data[pos:])
 	return node.data[pos+4 : pos+4+klen]
 }
 
 func (node BNode) getVal(idx uint16) []byte {
-	assert(idx < node.nkeys(), "Index out of bounds in getVal")
+	Assert(idx < node.nkeys(), "Index out of bounds in getVal")
 	pos := node.kvPos(idx)
 	klen := binary.LittleEndian.Uint16(node.data[pos:])
 	vlen := binary.LittleEndian.Uint16(node.data[pos+2:])
@@ -121,7 +121,7 @@ func nodeLookupLE(node BNode, key []byte) uint16 {
 	found := uint16(0)
 	// the first key is the copy from the parent node,
 	// thus it's always less than or equal to the key.
-	for i := uint16(1); i <= nKeys; i++ {
+	for i := uint16(1); i < nKeys; i++ {
 		cmp := bytes.Compare(node.getKey(i), key)
 		if cmp <= 0 {
 			found = i
@@ -143,8 +143,8 @@ func leafInsert(new BNode, old BNode, idx uint16, key []byte, val []byte) {
 }
 
 func nodeAppendRange(new BNode, old BNode, dstNew uint16, srcOld uint16, n uint16) {
-	assert(srcOld+n <= old.nkeys(), "Number of keys are larger than expected")
-	assert(dstNew+n <= new.nkeys(), "Number of keys are larger than expected")
+	Assert(srcOld+n <= old.nkeys(), "Number of keys are larger than expected")
+	Assert(dstNew+n <= new.nkeys(), "Number of keys are larger than expected")
 
 	if n == 0 {
 		return
@@ -273,7 +273,7 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	leftleft := BNode{make([]byte, BTREE_PAGE_SIZE)}
 	middle := BNode{make([]byte, BTREE_PAGE_SIZE)}
 	nodeSplit2(leftleft, middle, left)
-	assert(leftleft.nbytes() <= BTREE_PAGE_SIZE, "Left page size is greater than desired")
+	Assert(leftleft.nbytes() <= BTREE_PAGE_SIZE, "Left page size is greater than desired")
 	return 3, [3]BNode{leftleft, middle, right}
 }
 
@@ -342,7 +342,7 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 		tree.del(node.getPtr(idx + 1))
 		nodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
 	case mergeDir == 0:
-		assert(updated.nkeys() > 0, "can't merge")
+		Assert(updated.nkeys() > 0, "can't merge")
 		nodeReplaceKidN(tree, new, node, idx, updated)
 	}
 	return new
@@ -395,8 +395,8 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 
 // interface for deletion
 func (tree *BTree) Delete(key []byte) bool {
-	assert(len(key) != 0, "key is not valid")
-	assert(len(key) <= BTREE_PAGE_SIZE, "key is not valid")
+	Assert(len(key) != 0, "key is not valid")
+	Assert(len(key) <= BTREE_PAGE_SIZE, "key is not valid")
 	if tree.root == 0 {
 		return false
 	}
@@ -419,9 +419,9 @@ func (tree *BTree) Delete(key []byte) bool {
 
 // interface for inserting
 func (tree *BTree) Insert(key []byte, val []byte) {
-	assert(len(key) != 0, "key is not provided")
-	assert(len(key) <= BTREE_MAX_KEY_SIZE, "key provided exccedes the max size")
-	assert(len(val) <= BTREE_MAX_VAL_SIZE, "val provided exccedes the max size")
+	Assert(len(key) != 0, "key is not provided")
+	Assert(len(key) <= BTREE_MAX_KEY_SIZE, "key provided exccedes the max size")
+	Assert(len(val) <= BTREE_MAX_VAL_SIZE, "val provided exccedes the max size")
 
 	if tree.root == 0 {
 		// create the first node
@@ -466,19 +466,19 @@ func newC() *C {
 		tree: BTree{
 			get: func(ptr uint64) BNode {
 				node, ok := pages[ptr]
-				assert(ok, "unable to get node")
+				Assert(ok, "unable to get node")
 				return node
 			},
 			new: func(node BNode) uint64 {
-				assert(node.nbytes() <= BTREE_PAGE_SIZE, "number of bytes excedes the page limit size")
+				Assert(node.nbytes() <= BTREE_PAGE_SIZE, "number of bytes excedes the page limit size")
 				key := uint64(uintptr(unsafe.Pointer(&node.data[0])))
-				assert(pages[key].data == nil, "unable to create a page")
+				Assert(pages[key].data == nil, "unable to create a page")
 				pages[key] = node
 				return key
 			},
 			del: func(ptr uint64) {
 				_, ok := pages[ptr]
-				assert(ok, "unable to get page")
+				Assert(ok, "unable to get page")
 				delete(pages, ptr)
 			},
 		},
