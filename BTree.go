@@ -297,8 +297,45 @@ func treeDelete(tree *BTree, node BNode, key []byte) BNode {
 		leafDelete(new, node, idx)
 		return new
 	case BNODE_NODE:
-		// return nodeDelete(tree, node, idx, key)
+		return nodeDelete(tree, node, idx, key)
 	default:
 		panic("bad node!")
 	}
+}
+
+// part of the treeDelete()
+func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
+	// recurse into the kid
+	kptr := node.getPtr(idx)
+	updated := treeDelete(tree, tree.get(kptr), key)
+	if len(updated.data) == 0 {
+		return BNode{} // not found
+	}
+	tree.del(kptr)
+
+	new := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
+	// check for merging
+}
+
+// should the updated node be merged with a sibling?
+func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode) {
+	if updated.nbytes() > BTREE_PAGE_SIZE/4 {
+		return 0, BNode{}
+	}
+
+	if idx > 0 {
+		sibling := tree.get(node.getPtr(idx - 1))
+		merged := sibling.nbytes() + updated.nbytes() - HEADER
+		if merged <= BTREE_PAGE_SIZE {
+			return -1, sibling
+		}
+	}
+	if idx+1 < node.nkeys() {
+		sibling := tree.get(node.getPtr(idx + 1))
+		merged := sibling.nbytes() + updated.nbytes() - HEADER
+		if merged <= BTREE_PAGE_SIZE {
+			return +1, sibling
+		}
+	}
+	return 0, BNode{}
 }
