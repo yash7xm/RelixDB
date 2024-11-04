@@ -235,12 +235,25 @@ func nodeInsert(tree *BTree, new BNode, node BNode, idx uint16, key []byte, val 
 	nodeReplaceKidN(tree, new, node, idx, splited[:nsplit]...)
 }
 
-// split a bigger-than-allowed node into two.
-// the second node always fits on a page.
+// Split a node into two. The first node 'left' can still be bigger than one page,
+// but the second node 'right' must fit within one page.
 func nodeSplit2(left BNode, right BNode, old BNode) {
-	// code omitted...
-	left.data = old.data[:old.nbytes()-BTREE_PAGE_SIZE]
-	right.data = old.data[old.nbytes()-BTREE_PAGE_SIZE : old.nbytes()]
+	// First, set up the left node to handle part of the data
+	left.setHeader(old.btype(), 0)  // Start with an empty left node
+	right.setHeader(old.btype(), 0) // Start with an empty right node
+
+	nkeys := old.nkeys() // Total number of keys in the old node
+	mid := nkeys / 2     // Split the keys roughly in half
+
+	// Add the first half (or slightly more) to the left node
+	nodeAppendRange(left, old, 0, 0, mid)
+
+	// Add the remaining half to the right node
+	nodeAppendRange(right, old, 0, mid, nkeys-mid)
+
+	// Set the new number of keys for both nodes
+	left.setHeader(old.btype(), mid)
+	right.setHeader(old.btype(), nkeys-mid)
 }
 
 // split a node if it's too big. the results are 1~3 nodes.
