@@ -363,3 +363,27 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 	}
 	return 0, BNode{}
 }
+
+// interface for deletion
+func (tree *BTree) Delete(key []byte) bool {
+	assert(len(key) != 0, "key is not valid")
+	assert(len(key) <= BTREE_PAGE_SIZE, "key is not valid")
+	if tree.root == 0 {
+		return false
+	}
+
+	updated := treeDelete(tree, tree.get(tree.root), key)
+	if len(updated.data) == 0 {
+		return false // not found
+	}
+
+	tree.del(tree.root)
+	if updated.btype() == BNODE_NODE && updated.nkeys() == 1 {
+		// remove a level
+		tree.root = updated.getPtr(0)
+	} else {
+		tree.root = tree.new(updated)
+	}
+
+	return true
+}
