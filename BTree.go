@@ -322,17 +322,32 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
 		nodeMerge(merged, sibling, updated)
 		tree.del(node.getPtr(idx - 1))
-		// nodeReplace2Kid(new, node, idx - 1, tree.new(merged), merged.getKey(0))
+		nodeReplace2Kid(new, node, idx-1, tree.new(merged), merged.getKey(0))
 	case mergeDir > 0: // right
 		merged := BNode{data: make([]byte, BTREE_PAGE_SIZE)}
 		nodeMerge(merged, updated, sibling)
 		tree.del(node.getPtr(idx + 1))
-		// nodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
+		nodeReplace2Kid(new, node, idx, tree.new(merged), merged.getKey(0))
 	case mergeDir == 0:
 		assert(updated.nkeys() > 0, "can't merge")
 		nodeReplaceKidN(tree, new, node, idx, updated)
 	}
 	return new
+}
+
+// replace the child at index `idx` with a new merged node
+func nodeReplace2Kid(new BNode, old BNode, idx uint16, mergedPtr uint64, mergedKey []byte) {
+	// Set the header for the new node, with one less child than the old node
+	new.setHeader(BNODE_NODE, old.nkeys()-1)
+
+	// Copy the range of keys before the child at idx
+	nodeAppendRange(new, old, 0, 0, idx)
+
+	// Insert the merged node at idx (replace the child pointer and key at idx)
+	nodeAppendKV(new, idx, mergedPtr, mergedKey, nil)
+
+	// Copy the range of keys after idx (skipping over idx+1)
+	nodeAppendRange(new, old, idx+1, idx+2, old.nkeys()-(idx+2))
 }
 
 // merge two nodes into 1
