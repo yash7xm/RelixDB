@@ -111,7 +111,7 @@ func masterLoad(db *KV) error {
 	}
 
 	bad := !(1 <= used && used <= uint64(db.mmap.file/BTREE_PAGE_SIZE))
-	bad = bad || !(0 <= root && root < used)
+	bad = bad || !(root < used)
 
 	if bad {
 		return errors.New("bad master page")
@@ -148,8 +148,10 @@ func (db *KV) pageNew(node BNode) uint64 {
 }
 
 // callback for BTree, deallocate a page
-func (db *KV) pageDel(uint64) {
-
+func (db *KV) pageDel(ptr uint64) {
+	Assert(ptr >= db.page.flushed+uint64(len(db.page.temp)), "Attempt to delete an invalid or unallocated page")
+	db.page.temp = append(db.page.temp, nil)
+	fmt.Printf("Page at ptr %d has been deallocated.\n", ptr)
 }
 
 // extend the file to atleadt `npages`.
