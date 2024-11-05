@@ -1,12 +1,10 @@
-package kv
+package BTree
 
 import (
 	"errors"
 	"fmt"
 	"os"
 	"syscall"
-
-	BTree "github.com/yash7xm/RelixDB/BTree"
 )
 
 func mmapInit(fp *os.File) (int, []byte, error) {
@@ -15,12 +13,12 @@ func mmapInit(fp *os.File) (int, []byte, error) {
 		return 0, nil, fmt.Errorf("stat: %w", err)
 	}
 
-	if fi.Size()%BTree.BTREE_PAGE_SIZE != 0 {
+	if fi.Size()%BTREE_PAGE_SIZE != 0 {
 		return 0, nil, errors.New("file size is not a multiple of page size")
 	}
 
 	mmapSize := 64 << 20
-	BTree.Assert(mmapSize%BTree.BTREE_PAGE_SIZE == 0, "mmap size is not a multiple of page size.")
+	Assert(mmapSize%BTREE_PAGE_SIZE == 0, "mmap size is not a multiple of page size.")
 	for mmapSize < int(fi.Size()) {
 		mmapSize *= 2
 	}
@@ -41,7 +39,7 @@ type KV struct {
 	Path string
 	// internals
 	fp   *os.File
-	tree BTree.BTree
+	tree BTree
 	mmap struct {
 		file   int      // file size, can be larger than the database size
 		total  int      // mmap size, can be larger than the file size
@@ -55,7 +53,7 @@ type KV struct {
 
 // extend the mmap by adding new mappings
 func extendMmap(db *KV, npages int) error {
-	if db.mmap.total >= npages*BTree.BTREE_PAGE_SIZE {
+	if db.mmap.total >= npages*BTREE_PAGE_SIZE {
 		return nil
 	}
 
@@ -71,4 +69,18 @@ func extendMmap(db *KV, npages int) error {
 	db.mmap.total += db.mmap.total
 	db.mmap.chunks = append(db.mmap.chunks, chunk)
 	return nil
+}
+
+// callback for BTree, dereference  a pointer.
+func (db *KV) pageGet(ptr uint64) BNode {
+	start := uint64(0)
+	for _, chunk := range db.mmap.chunks {
+		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
+		if ptr < end {
+			offset := BTREE_PAGE_SIZE * (ptr - start)
+			return BNode{chunk[offset : offset+BTREE_PAGE_SIZE]}
+		}
+		start = end
+	}
+	panic("bad ptr")
 }
