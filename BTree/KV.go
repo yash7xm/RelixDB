@@ -20,8 +20,12 @@ type KV struct {
 		chunks [][]byte // mutliple mmaps, can be non-continuous
 	}
 	page struct {
-		flushed uint64   // database size in number of pages
-		temp    [][]byte // newly allocated pages
+		flushed uint64 // database size in number of pages
+		nfree   int    // number of pages taken from the free list
+		nappend int    // number of pages to be appended
+		// newly allocated or deallocated pages keyed by the pointer.
+		// nil value denotes a deallocated page
+		updates map[uint64][]byte
 	}
 }
 
@@ -119,6 +123,14 @@ func extendMmap(db *KV, npages int) error {
 
 // callback for BTree, dereference  a pointer.
 func (db *KV) pageGet(ptr uint64) BNode {
+	if page, ok := db.page.updates[ptr]; ok {
+		Assert(page != nil, "page not found")
+		return BNode{page} // for new pages
+	}
+	return pageGetMapped(db, ptr) // for written pages
+}
+
+func pageGetMapped(db *KV, ptr uint64) BNode {
 	start := uint64(0)
 	for _, chunk := range db.mmap.chunks {
 		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
