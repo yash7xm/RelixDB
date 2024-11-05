@@ -281,8 +281,17 @@ func flushPages(db *KV) error {
 }
 
 func writePages(db *KV) error {
+	// update the free list
+	freed := []uint64{}
+	for ptr, page := range db.page.updates {
+		if page == nil {
+			freed = append(freed, ptr)
+		}
+	}
+	db.free.Update(db.page.nfree, freed)
+
 	// extend the file and mmap if needed
-	npages := int(db.page.flushed) + len(db.page.temp)
+	npages := int(db.page.flushed) + len(db.page.updates)
 	if err := extendFile(db, npages); err != nil {
 		return err
 	}
@@ -290,10 +299,11 @@ func writePages(db *KV) error {
 		return err
 	}
 
-	// copy data to the file
-	for i, page := range db.page.temp {
-		ptr := db.page.flushed + uint64(i)
-		copy(db.pageGet(ptr).data, page)
+	// copy pages to the file
+	for ptr, page := range db.page.updates {
+		if page != nil {
+			copy(pageGetMapped(db, ptr).data, page)
+		}
 	}
 
 	return nil
@@ -304,8 +314,9 @@ func syncPages(db *KV) error {
 	if err := db.fp.Sync(); err != nil {
 		return fmt.Errorf("fscync: %w", err)
 	}
-	db.page.flushed += uint64(len(db.page.temp))
-	db.page.temp = db.page.temp[:0]
+	db.page.flushed += uint64(len(db.page.updates))
+	// think this
+	// db.page.updates = db.page.updates[0]
 
 	// update and flush the master page
 	if err := masterStore(db); err != nil {
