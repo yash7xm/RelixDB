@@ -52,3 +52,23 @@ type KV struct {
 		temp    [][]byte // newly allocated pages
 	}
 }
+
+// extend the mmap by adding new mappings
+func extendMmap(db *KV, npages int) error {
+	if db.mmap.total >= npages*BTree.BTREE_PAGE_SIZE {
+		return nil
+	}
+
+	// double the address space
+	chunk, err := syscall.Mmap(
+		int(db.fp.Fd()), int64(db.mmap.total), db.mmap.total,
+		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED,
+	)
+	if err != nil {
+		return fmt.Errorf("mmap: %w", err)
+	}
+
+	db.mmap.total += db.mmap.total
+	db.mmap.chunks = append(db.mmap.chunks, chunk)
+	return nil
+}
