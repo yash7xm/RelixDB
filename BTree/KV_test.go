@@ -44,6 +44,7 @@ func TestKV_SetGet(t *testing.T) {
 	}
 	defer kv.Close()
 
+
 	// Insert key-value pair
 	key := []byte("hello")
 	val := []byte("world")
@@ -52,10 +53,39 @@ func TestKV_SetGet(t *testing.T) {
 		t.Fatalf("KV.Set() failed: %v", err)
 	}
 
-	// Retrieve the value for the same key
 	retrievedVal, found := kv.Get(key)
 	if !found || string(retrievedVal) != string(val) {
 		t.Fatalf("KV.Get() failed: expected %s, got %s", val, retrievedVal)
+	}
+
+	key = []byte("a")
+	val = []byte("aa")
+
+	if err := kv.Set(key, val); err != nil {
+		t.Fatalf("KV.Set() failed: %v", err)
+	}
+
+	retrievedVal, found = kv.Get(key)
+	if !found || string(retrievedVal) != string(val) {
+		t.Fatalf("KV.Get() failed: expected %s, got %s", val, retrievedVal)
+	}
+
+	key = []byte("b")
+	val = []byte("bb")
+
+	if err := kv.Set(key, val); err != nil {
+		t.Fatalf("KV.Set() failed: %v", err)
+	}
+
+	// Retrieve the value for the same key
+	retrievedVal, found = kv.Get(key)
+	if !found || string(retrievedVal) != string(val) {
+		t.Fatalf("KV.Get() failed: expected %s, got %s", val, retrievedVal)
+	}
+
+	kv.Close()
+	if err := kv.Open(); err != nil {
+		t.Fatalf("KV.Open() failed: %v", err)
 	}
 }
 

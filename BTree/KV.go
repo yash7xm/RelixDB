@@ -63,16 +63,10 @@ func (db *KV) Open() (err error) {
 // cleanups
 func (db *KV) Close() {
 	for _, chunk := range db.mmap.chunks {
-		if chunk != nil {
-			err := syscall.Munmap(chunk)
-			if err != nil {
-				fmt.Printf("Warning: failed to unmap the mmap: %v\n", err)
-			}
-		}
+		err := syscall.Munmap(chunk)
+		Assert(err == nil, "unable to unmap")
 	}
-	if db.fp != nil {
-		_ = db.fp.Close()
-	}
+	_ = db.fp.Close()
 }
 
 func mmapInit(fp *os.File) (int, []byte, error) {
@@ -137,7 +131,7 @@ func (db *KV) pageGet(ptr uint64) BNode {
 	panic("bad ptr")
 }
 
-const DB_SIG = "RelixDB"
+const DB_SIG = "RelxDBYashPoonia"
 
 // the master page format.
 // it contains the pointer to the root and other important bits.
@@ -177,7 +171,8 @@ func masterStore(db *KV) error {
 	binary.LittleEndian.PutUint64(data[24:], db.page.flushed)
 	// NOTE: Updating the page via mmap is not atomic.
 	// Use the `pwrite()` syscall instead.
-	_, err := db.fp.WriteAt(data[:], 0)
+	_, err := syscall.Pwrite(int(db.fp.Fd()), data[:], 0)
+	// _, err := db.fp.WriteAt(data[:], 0)
 	if err != nil {
 		return fmt.Errorf("write master page: %w", err)
 	}
