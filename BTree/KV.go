@@ -121,3 +121,19 @@ func masterLoad(db *KV) error {
 	db.page.flushed = used
 	return nil
 }
+
+// update the master page. it must be atomic.
+func masterStore(db *KV) error {
+	var data [32]byte
+	copy(data[:16], []byte(DB_SIG))
+	binary.LittleEndian.PutUint64(data[16:], db.tree.root)
+	binary.LittleEndian.PutUint64(data[24:], db.page.flushed)
+	// NOTE: Updating the page via mmap is not atomic.
+	// Use the `pwrite()` syscall instead.
+
+	_, err := db.fp.WriteAt(data[:], 0)
+	if err != nil {
+		return fmt.Errorf("write master page: %w", err)
+	}
+	return nil
+}
