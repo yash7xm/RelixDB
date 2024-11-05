@@ -9,6 +9,65 @@ import (
 	"syscall"
 )
 
+type KV struct {
+	Path string
+	// internals
+	fp   *os.File
+	tree BTree
+	mmap struct {
+		file   int      // file size, can be larger than the database size
+		total  int      // mmap size, can be larger than the file size
+		chunks [][]byte // mutliple mmaps, can be non-continuous
+	}
+	page struct {
+		flushed uint64   // database size in number of pages
+		temp    [][]byte // newly allocated pages
+	}
+}
+
+func (db *KV) Open() error {
+	// open or create the DB file
+	fp, err := os.OpenFile(db.Path, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("OpenFile: %w", err)
+	}
+	db.fp = fp
+
+	// create the initial mmap
+	sz, chunk, err := mmapInit(db.fp)
+	if err != nil {
+		goto fail
+	}
+
+	db.mmap.file = sz
+	db.mmap.total = len(chunk)
+	db.mmap.chunks = [][]byte{chunk}
+
+	// BTree callbacks
+	db.tree.get = db.pageGet
+	db.tree.new = db.pageNew
+	db.tree.del = db.pageDel
+
+	// read the master page
+	err = masterLoad(db)
+	if err != nil {
+		goto fail
+	}
+
+fail:
+	// db.Close()
+	return fmt.Errorf("KV.Open: %w", err)
+}
+
+// cleanups
+func (db *KV) Close() {
+	for _, chunk := range db.mmap.chunks {
+		err := syscall.Munmap(chunk)
+		Assert(err == nil, "failed to un map the mmap")
+	}
+	_ = db.fp.Close()
+}
+
 func mmapInit(fp *os.File) (int, []byte, error) {
 	fi, err := fp.Stat()
 	if err != nil {
@@ -35,22 +94,6 @@ func mmapInit(fp *os.File) (int, []byte, error) {
 	}
 
 	return int(fi.Size()), chunk, nil
-}
-
-type KV struct {
-	Path string
-	// internals
-	fp   *os.File
-	tree BTree
-	mmap struct {
-		file   int      // file size, can be larger than the database size
-		total  int      // mmap size, can be larger than the file size
-		chunks [][]byte // mutliple mmaps, can be non-continuous
-	}
-	page struct {
-		flushed uint64   // database size in number of pages
-		temp    [][]byte // newly allocated pages
-	}
 }
 
 // extend the mmap by adding new mappings
@@ -181,53 +224,9 @@ func extendFile(db *KV, npages int) error {
 	return nil
 }
 
-func (db *KV) Open() error {
-	// open or create the DB file
-	fp, err := os.OpenFile(db.Path, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("OpenFile: %w", err)
-	}
-	db.fp = fp
-
-	// create the initial mmap
-	sz, chunk, err := mmapInit(db.fp)
-	if err != nil {
-		goto fail
-	}
-
-	db.mmap.file = sz
-	db.mmap.total = len(chunk)
-	db.mmap.chunks = [][]byte{chunk}
-
-	// BTree callbacks
-	db.tree.get = db.pageGet
-	db.tree.new = db.pageNew
-	db.tree.del = db.pageDel
-
-	// read the master page
-	err = masterLoad(db)
-	if err != nil {
-		goto fail
-	}
-
-fail:
-	// db.Close()
-	return fmt.Errorf("KV.Open: %w", err)
-}
-
-// cleanups
-func (db *KV) Close() {
-	for _, chunk := range db.mmap.chunks {
-		err := syscall.Munmap(chunk)
-		Assert(err == nil, "failed to un map the mmap")
-	}
-	_ = db.fp.Close()
-}
-
 // read the db
 func (db *KV) Get(key []byte) ([]byte, bool) {
-	// return db.tree.Get(key)
-	return make([]byte, 1), true
+	return db.tree.Get(key)
 }
 
 // update the db
