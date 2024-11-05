@@ -138,7 +138,6 @@ func masterStore(db *KV) error {
 	return nil
 }
 
-
 // callback for BTree, allocate a new page.
 func (db *KV) pageNew(node BNode) uint64 {
 	// TODO: reuse deallocated pages
@@ -150,5 +149,32 @@ func (db *KV) pageNew(node BNode) uint64 {
 
 // callback for BTree, deallocate a page
 func (db *KV) pageDel(uint64) {
-	
+
+}
+
+// extend the file to atleadt `npages`.
+func extendFile(db *KV, npages int) error {
+	filePages := db.mmap.file / BTREE_PAGE_SIZE
+	if filePages >= npages {
+		return nil
+	}
+
+	for filePages < npages {
+		// the file size is increased exponentially
+		// so that we don't have to extend the size for every update.
+		inc := filePages / 8
+		if inc < 1 {
+			inc = 1
+		}
+		filePages += inc
+	}
+
+	fileSize := filePages * BTREE_PAGE_SIZE
+	err := syscall.Fallocate(int(db.fp.Fd()), 0, 0, int64(fileSize))
+	if err != nil {
+		return fmt.Errorf("fallocate: %w", err)
+	}
+
+	db.mmap.file = fileSize
+	return nil
 }
