@@ -221,3 +221,68 @@ func (db *KV) Close() {
 	}
 	_ = db.fp.Close()
 }
+
+// read the db
+func (db *KV) Get(key []byte) ([]byte, bool) {
+	// return db.tree.Get(key)
+	return make([]byte, 1), true
+}
+
+// update the db
+func (db *KV) Set(key []byte, val []byte) error {
+	db.tree.Insert(key, val)
+	return flushPages(db)
+}
+
+func (db *KV) Del(key []byte) (bool, error) {
+	deleted := db.tree.Delete(key)
+	return deleted, flushPages(db)
+}
+
+// persist the newly allocated pages after updates
+func flushPages(db *KV) error {
+	if err := writePages(db); err != nil {
+		return err
+	}
+
+	return syncPages(db)
+}
+
+func writePages(db *KV) error {
+	// extend the file and mmap if needed
+	npages := int(db.page.flushed) + len(db.page.temp)
+	if err := extendFile(db, npages); err != nil {
+		return err
+	}
+	if err := extendMmap(db, npages); err != nil {
+		return err
+	}
+
+	// copy data to the file
+	for i, page := range db.page.temp {
+		ptr := db.page.flushed + uint64(i)
+		copy(db.pageGet(ptr).data, page)
+	}
+
+	return nil
+}
+
+func syncPages(db *KV) error {
+	// flush data to the disk. must be done before updating the master page.
+	if err := db.fp.Sync(); err != nil {
+		return fmt.Errorf("fscync: %w", err)
+	}
+	db.page.flushed += uint64(len(db.page.temp))
+	db.page.temp = db.page.temp[:0]
+
+	// update and flush the master page
+	if err := masterStore(db); err != nil {
+		return err
+	}
+
+	if err := db.fp.Sync(); err != nil {
+		return fmt.Errorf("fscync: %w", err)
+	}
+
+	return nil
+}
