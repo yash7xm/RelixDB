@@ -25,7 +25,7 @@ type KV struct {
 	}
 }
 
-func (db *KV) Open() error {
+func (db *KV) Open() (err error) {
 	// open or create the DB file
 	fp, err := os.OpenFile(db.Path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -36,8 +36,8 @@ func (db *KV) Open() error {
 	// create the initial mmap
 	sz, chunk, err := mmapInit(db.fp)
 	if err != nil {
-		fmt.Println("Mmap init error")
-		goto fail
+		db.Close() // Ensure resources are released
+		return fmt.Errorf("mmap init error: %w", err)
 	}
 
 	db.mmap.file = sz
@@ -52,13 +52,12 @@ func (db *KV) Open() error {
 	// read the master page
 	err = masterLoad(db)
 	if err != nil {
-		fmt.Println("master load error")
-		goto fail
+		db.Close() // Ensure resources are released
+		return fmt.Errorf("master load error: %w", err)
 	}
 
-fail:
-	db.Close()
-	return fmt.Errorf("KV.Open: %w", err)
+	// No errors, return nil
+	return nil
 }
 
 // cleanups
