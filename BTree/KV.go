@@ -36,6 +36,7 @@ func (db *KV) Open() error {
 	// create the initial mmap
 	sz, chunk, err := mmapInit(db.fp)
 	if err != nil {
+		fmt.Println("Mmap init error")
 		goto fail
 	}
 
@@ -51,11 +52,12 @@ func (db *KV) Open() error {
 	// read the master page
 	err = masterLoad(db)
 	if err != nil {
+		fmt.Println("master load error")
 		goto fail
 	}
 
 fail:
-	// db.Close()
+	db.Close()
 	return fmt.Errorf("KV.Open: %w", err)
 }
 
@@ -63,7 +65,7 @@ fail:
 func (db *KV) Close() {
 	for _, chunk := range db.mmap.chunks {
 		err := syscall.Munmap(chunk)
-		Assert(err == nil, "failed to un map the mmap")
+		Assert(err == nil, "failed to unmap the mmap")
 	}
 	_ = db.fp.Close()
 }
