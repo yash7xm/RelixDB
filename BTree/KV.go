@@ -137,3 +137,18 @@ func masterStore(db *KV) error {
 	}
 	return nil
 }
+
+
+// callback for BTree, allocate a new page.
+func (db *KV) pageNew(node BNode) uint64 {
+	// TODO: reuse deallocated pages
+	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node size excceds the page size")
+	ptr := db.page.flushed + uint64(len(db.page.temp))
+	db.page.temp = append(db.page.temp, node.data)
+	return ptr
+}
+
+// callback for BTree, deallocate a page
+func (db *KV) pageDel(uint64) {
+	
+}
