@@ -66,6 +66,34 @@ func (tree *BTree) Delete(key []byte) bool {
 	return true
 }
 
+// interface for getting a value by key
+func (tree *BTree) Get(key []byte) ([]byte, bool) {
+	Assert(len(key) != 0, "key is not provided")
+	Assert(len(key) <= BTREE_MAX_KEY_SIZE, "key provided exceeds the max size")
+
+	if tree.root == 0 {
+		return nil, false // tree is empty
+	}
+
+	node := tree.get(tree.root) // Start from the root
+	for {
+		idx := nodeLookupLE(node, key)
+		switch node.btype() {
+		case BNODE_LEAF:
+			// In a leaf node, check if the key exists at the found index
+			if bytes.Equal(key, node.getKey(idx)) {
+				return node.getVal(idx), true // key found, return value
+			}
+			return nil, false // key not found in the leaf
+		case BNODE_NODE:
+			// If it's an internal node, move to the child node
+			node = tree.get(node.getPtr(idx))
+		default:
+			panic("Unknown node type!")
+		}
+	}
+}
+
 // Returns the first kid node whose range intersects the key. (kid[i] <= key)
 // TODO: bisect
 func nodeLookupLE(node BNode, key []byte) uint16 {
