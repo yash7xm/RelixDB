@@ -36,3 +36,19 @@ func mmapInit(fp *os.File) (int, []byte, error) {
 
 	return int(fi.Size()), chunk, nil
 }
+
+type KV struct {
+	Path string
+	// internals
+	fp   *os.File
+	tree BTree.BTree
+	mmap struct {
+		file   int      // file size, can be larger than the database size
+		total  int      // mmap size, can be larger than the file size
+		chunks [][]byte // mutliple mmaps, can be non-continuous
+	}
+	page struct {
+		flushed uint64   // database size in number of pages
+		temp    [][]byte // newly allocated pages
+	}
+}
