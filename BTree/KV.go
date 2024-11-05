@@ -27,6 +27,7 @@ type KV struct {
 		// nil value denotes a deallocated page
 		updates map[uint64][]byte
 	}
+	free FreeList
 }
 
 func (db *KV) Open() (err error) {
@@ -121,7 +122,7 @@ func extendMmap(db *KV, npages int) error {
 	return nil
 }
 
-// callback for BTree, dereference  a pointer.
+// callback for BTree & FreeList, dereference a pointer.
 func (db *KV) pageGet(ptr uint64) BNode {
 	if page, ok := db.page.updates[ptr]; ok {
 		Assert(page != nil, "page not found")
@@ -193,18 +194,24 @@ func masterStore(db *KV) error {
 
 // callback for BTree, allocate a new page.
 func (db *KV) pageNew(node BNode) uint64 {
-	// TODO: reuse deallocated pages
-	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node size excceds the page size")
-	ptr := db.page.flushed + uint64(len(db.page.temp))
-	db.page.temp = append(db.page.temp, node.data)
+	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node data excceds page size")
+	ptr := uint64(0)
+	if db.page.nfree < db.free.Total() {
+		// reuse a deallocated page
+		ptr = db.free.Get(db.page.nfree)
+		db.page.nfree++
+	} else {
+		// append a new page
+		ptr = db.page.flushed + uint64(db.page.nappend)
+		db.page.nappend++
+	}
+	db.page.updates[ptr] = node.data
 	return ptr
 }
 
 // callback for BTree, deallocate a page
 func (db *KV) pageDel(ptr uint64) {
-	// Assert(ptr > db.page.flushed, "Attempt to delete an invalid or unallocated page")
-	db.page.temp = append(db.page.temp, nil)
-	fmt.Printf("Page at ptr %d has been deallocated.\n", ptr)
+	db.page.updates[ptr] = nil
 }
 
 // extend the file to atleadt `npages`.
