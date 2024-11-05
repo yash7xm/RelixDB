@@ -178,3 +178,46 @@ func extendFile(db *KV, npages int) error {
 	db.mmap.file = fileSize
 	return nil
 }
+
+func (db *KV) Open() error {
+	// open or create the DB file
+	fp, err := os.OpenFile(db.Path, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("OpenFile: %w", err)
+	}
+	db.fp = fp
+
+	// create the initial mmap
+	sz, chunk, err := mmapInit(db.fp)
+	if err != nil {
+		goto fail
+	}
+
+	db.mmap.file = sz
+	db.mmap.total = len(chunk)
+	db.mmap.chunks = [][]byte{chunk}
+
+	// BTree callbacks
+	db.tree.get = db.pageGet
+	db.tree.new = db.pageNew
+	db.tree.del = db.pageDel
+
+	// read the master page
+	err = masterLoad(db)
+	if err != nil {
+		goto fail
+	}
+
+fail:
+	// db.Close()
+	return fmt.Errorf("KV.Open: %w", err)
+}
+
+// cleanups
+func (db *KV) Close() {
+	for _, chunk := range db.mmap.chunks {
+		err := syscall.Munmap(chunk)
+		Assert(err == nil, "failed to un map the mmap")
+	}
+	_ = db.fp.Close()
+}
