@@ -214,6 +214,20 @@ func (db *KV) pageDel(ptr uint64) {
 	db.page.updates[ptr] = nil
 }
 
+// callback for FreeList, allocate a new page.
+func (db *KV) pageAppend(node BNode) uint64 {
+	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node data excceds page size")
+	ptr := db.page.flushed + uint64(db.page.nappend)
+	db.page.nappend++
+	db.page.updates[ptr] = node.data
+	return ptr
+}
+
+// callback for FreeList, reuse a page.
+func (db *KV) pageUse(ptr uint64, node BNode) {
+	db.page.updates[ptr] = node.data
+}
+
 // extend the file to atleadt `npages`.
 func extendFile(db *KV, npages int) error {
 	filePages := db.mmap.file / BTREE_PAGE_SIZE
