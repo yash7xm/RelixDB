@@ -1,6 +1,8 @@
 package BTree
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -83,4 +85,39 @@ func (db *KV) pageGet(ptr uint64) BNode {
 		start = end
 	}
 	panic("bad ptr")
+}
+
+const DB_SIG = "RelixDB"
+
+// the master page format.
+// it contains the pointer to the root and other important bits.
+// | sig | btree_root | page_used |
+// | 16B |    8B      |    8B     |
+
+func masterLoad(db *KV) error {
+	if db.mmap.file == 0 {
+		// empty fily, the master page will be created on the first write.
+		db.page.flushed = 1 // reserved for master page
+		return nil
+	}
+
+	data := db.mmap.chunks[0]
+	root := binary.LittleEndian.Uint64(data[16:])
+	used := binary.LittleEndian.Uint64(data[24:])
+
+	// verify the page
+	if !bytes.Equal([]byte(DB_SIG), data[:16]) {
+		return errors.New("bad signature")
+	}
+
+	bad := !(1 <= used && used <= uint64(db.mmap.file/BTREE_PAGE_SIZE))
+	bad = bad || !(0 <= root && root < used)
+
+	if bad {
+		return errors.New("bad master page")
+	}
+
+	db.tree.root = root
+	db.page.flushed = used
+	return nil
 }
