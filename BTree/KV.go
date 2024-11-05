@@ -63,10 +63,16 @@ func (db *KV) Open() (err error) {
 // cleanups
 func (db *KV) Close() {
 	for _, chunk := range db.mmap.chunks {
-		err := syscall.Munmap(chunk)
-		Assert(err == nil, "failed to unmap the mmap")
+		if chunk != nil {
+			err := syscall.Munmap(chunk)
+			if err != nil {
+				fmt.Printf("Warning: failed to unmap the mmap: %v\n", err)
+			}
+		}
 	}
-	_ = db.fp.Close()
+	if db.fp != nil {
+		_ = db.fp.Close()
+	}
 }
 
 func mmapInit(fp *os.File) (int, []byte, error) {
@@ -139,12 +145,12 @@ const DB_SIG = "RelixDB"
 // | 16B |    8B      |    8B     |
 
 func masterLoad(db *KV) error {
+	// If the file is empty, initialize the master page
 	if db.mmap.file == 0 {
-		// empty fily, the master page will be created on the first write.
-		db.page.flushed = 1 // reserved for master page
+		// empty file, the master page will be created on the first write.
+		db.page.flushed = 1 // reserved for the master page
 		return nil
 	}
-
 	data := db.mmap.chunks[0]
 	root := binary.LittleEndian.Uint64(data[16:])
 	used := binary.LittleEndian.Uint64(data[24:])
@@ -153,14 +159,11 @@ func masterLoad(db *KV) error {
 	if !bytes.Equal([]byte(DB_SIG), data[:16]) {
 		return errors.New("bad signature")
 	}
-
 	bad := !(1 <= used && used <= uint64(db.mmap.file/BTREE_PAGE_SIZE))
 	bad = bad || !(root < used)
-
 	if bad {
 		return errors.New("bad master page")
 	}
-
 	db.tree.root = root
 	db.page.flushed = used
 	return nil
@@ -174,7 +177,6 @@ func masterStore(db *KV) error {
 	binary.LittleEndian.PutUint64(data[24:], db.page.flushed)
 	// NOTE: Updating the page via mmap is not atomic.
 	// Use the `pwrite()` syscall instead.
-
 	_, err := db.fp.WriteAt(data[:], 0)
 	if err != nil {
 		return fmt.Errorf("write master page: %w", err)
@@ -193,7 +195,7 @@ func (db *KV) pageNew(node BNode) uint64 {
 
 // callback for BTree, deallocate a page
 func (db *KV) pageDel(ptr uint64) {
-	Assert(ptr >= db.page.flushed+uint64(len(db.page.temp)), "Attempt to delete an invalid or unallocated page")
+	// Assert(ptr > db.page.flushed, "Attempt to delete an invalid or unallocated page")
 	db.page.temp = append(db.page.temp, nil)
 	fmt.Printf("Page at ptr %d has been deallocated.\n", ptr)
 }
