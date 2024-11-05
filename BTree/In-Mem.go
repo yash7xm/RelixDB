@@ -1,6 +1,8 @@
 package BTree
 
-import "unsafe"
+import (
+	"unsafe"
+)
 
 type C struct {
 	tree  BTree
@@ -39,7 +41,16 @@ func (c *C) add(key string, val string) {
 	c.tree.Insert([]byte(key), []byte(val))
 	c.ref[key] = val
 }
+
 func (c *C) del(key string) bool {
 	delete(c.ref, key)
 	return c.tree.Delete([]byte(key))
+}
+
+func (c *C) get(key string) string {
+	val, found := c.tree.Get([]byte(key))
+	if found && string(val) == c.ref[key] {
+		return string(val)
+	}
+	return ""
 }

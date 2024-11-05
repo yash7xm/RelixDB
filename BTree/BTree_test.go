@@ -142,5 +142,23 @@ func TestBTreeInsertDeleteLarge(t *testing.T) {
 	}
 }
 
+func TestBTreeGetValues(t *testing.T) {
+	c := newC()
 
+	// Insert some key-value pairs
+	c.add("apple", "red")
+	c.add("banana", "yellow")
+	c.add("grape", "purple")
+	c.add("kiwi", "green")
+	c.add("mango", "orange")
 
+	// Retrieve and verify the values using c.tree.Get()
+	assert.Equal(t, "red", string(c.get("apple")), "Expected value for 'apple' to be 'red'")
+	assert.Equal(t, "yellow", string(c.get(("banana"))), "Expected value for 'banana' to be 'yellow'")
+	assert.Equal(t, "purple", string(c.get(("grape"))), "Expected value for 'grape' to be 'purple'")
+	assert.Equal(t, "green", string(c.get(("kiwi"))), "Expected value for 'kiwi' to be 'green'")
+	assert.Equal(t, "orange", string(c.get(("mango"))), "Expected value for 'mango' to be 'orange'")
+
+	// Try to retrieve a non-existent key
+	assert.Equal(t, "", c.get(("pineapple")), "Expected 'pineapple' to not exist in B-Tree")
+}
