@@ -266,3 +266,48 @@ func (db *DB) Delete(table string, rec Record) (bool, error) {
 	}
 	return dbDelete(db, tdef, rec)
 }
+
+// Create new table
+
+const TABLE_PREFIX_MIN = 1
+
+func (db *DB) TableNew(tdef *TableDef) error {
+	if err := tableDefCheck(tdef); err != nil {
+		return err
+	}
+
+	// check the existing table
+	table := (&Record{}).AddStr("name", []byte(tdef.Name))
+	ok, err := dbGet(db, TDEF_TABLE, table)
+	Assert(err == nil, "error get table def	")
+	if ok {
+		return fmt.Errorf("table exists: %s", tdef.Name)
+	}
+
+	// allocate a new prefix
+	Assert(tdef.Prefix == 0, "error in tdef prefix")
+	tdef.Prefix = TABLE_PREFIX_MIN
+	meta := (&Record{}).AddStr("key", []byte("next_prefix"))
+	ok, err = dbGet(db, TDEF_META, meta)
+	Assert(err == nil, "unable to get meta table")
+	if ok {
+		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
+		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "table prefix is lower the excepted")
+	} else {
+		meta.AddStr("val", make([]byte, 4))
+	}
+
+	// update the next prefix
+	binary.LittleEndian.PutUint32(meta.Get("val").Str, tdef.Prefix+1)
+	_, err = dbUpdate(db, TDEF_META, *meta, 0)
+	if err != nil {
+		return err
+	}
+
+	// store the definition
+	val, err := json.Marshal(tdef)
+	Assert(err == nil, "unable to marshall tdef")
+	table.AddStr("def", val)
+	_, err = dbUpdate(db, TDEF_TABLE, *table, 0)
+	return err
+}
