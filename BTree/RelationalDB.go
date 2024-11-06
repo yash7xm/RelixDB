@@ -26,49 +26,42 @@ type Record struct {
 }
 
 func (rec *Record) AddStr(key string, val []byte) *Record {
-	Val := Value{
-		Type: 1,
+	// Create a new Value for the string (byte array)
+	value := Value{
+		Type: TYPE_BYTES,
 		Str:  val,
 	}
-	new := &Record{}
-	for i, colName := range rec.Cols {
-		new.Cols[i] = colName
-		if colName != key {
-			new.Vals[i] = rec.Vals[i]
-		} else {
-			new.Vals[i] = Val
-		}
-	}
-	return new
+
+	// Add key and value to the record's columns and values
+	rec.Cols = append(rec.Cols, key)
+	rec.Vals = append(rec.Vals, value)
+
+	return rec
 }
 
 func (rec *Record) AddInt64(key string, val int64) *Record {
-	Val := Value{
-		Type: 2,
+	// Create a new Value for the int64
+	value := Value{
+		Type: TYPE_INT64,
 		I64:  val,
 	}
-	new := &Record{}
-	for i, colName := range rec.Cols {
-		new.Cols[i] = colName
-		if colName != key {
-			new.Vals[i] = rec.Vals[i]
-		} else {
-			new.Vals[i] = Val
-		}
-	}
-	return new
+
+	// Add key and value to the record's columns and values
+	rec.Cols = append(rec.Cols, key)
+	rec.Vals = append(rec.Vals, value)
+
+	return rec
 }
 
 func (rec *Record) Get(key string) *Value {
-	idx := 0
-	for i, colName := range rec.Cols {
-		if colName == key {
-			idx = i
-			break
+	for i, col := range rec.Cols {
+		if col == key {
+			// Return the pointer to the value if the key matches
+			return &rec.Vals[i]
 		}
 	}
-
-	return &rec.Vals[idx]
+	// If key not found, return nil
+	return nil
 }
 
 type DB struct {
@@ -316,12 +309,13 @@ func (tree *BTree) InsertEx(req *InsertReq) {
 
 func (db *KV) Update(key []byte, val []byte, mode int) (bool, error) {
 	req := &InsertReq{
-        Key:  key,
-        Val:  val,
-        Mode: mode,
-    }
-    db.tree.InsertEx(req)
-    return req.Added, nil
+		tree: &db.tree,
+		Key:  key,
+		Val:  val,
+		Mode: mode,
+	}
+	db.tree.InsertEx(req)
+	return req.Added, nil
 }
 
 // add a row to the table
@@ -417,4 +411,26 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	table.AddStr("def", val)
 	_, err = dbUpdate(db, TDEF_TABLE, *table, 0)
 	return err
+}
+
+func tableDefCheck(tdef *TableDef) error {
+	if len(tdef.Cols) == 0 || len(tdef.Types) == 0 {
+		return fmt.Errorf("table definition must have at least one column and one type")
+	}
+
+	if len(tdef.Cols) != len(tdef.Types) {
+		return fmt.Errorf("number of columns does not match number of types")
+	}
+
+	if tdef.PKeys <= 0 || tdef.PKeys > len(tdef.Cols) {
+		return fmt.Errorf("invalid number of primary keys")
+	}
+
+	for i := 0; i < tdef.PKeys; i++ {
+		if tdef.Types[i] != TYPE_INT64 && tdef.Types[i] != TYPE_BYTES {
+			return fmt.Errorf("primary key columns must be of type int64 or bytes")
+		}
+	}
+
+	return nil
 }
