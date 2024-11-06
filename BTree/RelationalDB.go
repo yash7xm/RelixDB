@@ -27,41 +27,43 @@ type Record struct {
 }
 
 func (rec *Record) AddStr(key string, val []byte) *Record {
-	// Create a new Value for the string (byte array)
-	value := Value{
-		Type: TYPE_BYTES,
-		Str:  val,
+	// Find index of the column if it already exists
+	for i, col := range rec.Cols {
+		if col == key {
+			// Update existing column's value
+			rec.Vals[i] = Value{Type: TYPE_BYTES, Str: val}
+			return rec
+		}
 	}
-
-	// Add key and value to the record's columns and values
+	// If column does not exist, add new column
 	rec.Cols = append(rec.Cols, key)
-	rec.Vals = append(rec.Vals, value)
-
+	rec.Vals = append(rec.Vals, Value{Type: TYPE_BYTES, Str: val})
 	return rec
 }
 
 func (rec *Record) AddInt64(key string, val int64) *Record {
-	// Create a new Value for the int64
-	value := Value{
-		Type: TYPE_INT64,
-		I64:  val,
+	// Find index of the column if it already exists
+	for i, col := range rec.Cols {
+		if col == key {
+			// Update existing column's value
+			rec.Vals[i] = Value{Type: TYPE_INT64, I64: val}
+			return rec
+		}
 	}
-
-	// Add key and value to the record's columns and values
+	// If column does not exist, add new column
 	rec.Cols = append(rec.Cols, key)
-	rec.Vals = append(rec.Vals, value)
-
+	rec.Vals = append(rec.Vals, Value{Type: TYPE_INT64, I64: val})
 	return rec
 }
 
 func (rec *Record) Get(key string) *Value {
+	// Find the value for the corresponding column
 	for i, col := range rec.Cols {
 		if col == key {
-			// Return the pointer to the value if the key matches
 			return &rec.Vals[i]
 		}
 	}
-	// If key not found, return nil
+	// Return nil if the column is not found
 	return nil
 }
 
@@ -422,9 +424,8 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	ok, err = dbGet(db, TDEF_META, meta)
 	Assert(err == nil, "error in getting def")
 	if ok {
-		fmt.Println(meta.Get("val").Str)
 		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
-		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "prefix lower than min")
+		Assert(tdef.Prefix >= TABLE_PREFIX_MIN, "prefix lower than min")
 	} else {
 		meta.AddStr("val", make([]byte, 4))
 	}
