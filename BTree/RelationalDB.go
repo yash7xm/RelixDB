@@ -425,7 +425,7 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	Assert(err == nil, "error in getting def")
 	if ok {
 		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
-		Assert(tdef.Prefix >= TABLE_PREFIX_MIN, "prefix lower than min")
+		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "prefix lower than min")
 	} else {
 		meta.AddStr("val", make([]byte, 4))
 	}
