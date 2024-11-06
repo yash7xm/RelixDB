@@ -1,5 +1,7 @@
 package BTree
 
+import "encoding/binary"
+
 type FreeList struct {
 	head uint64
 	// callbacks for managing on-disk pages
@@ -13,15 +15,54 @@ const FREE_LIST_HEADER = 4 + 8 + 8
 const FREE_LIST_CAP = (BTREE_PAGE_SIZE - FREE_LIST_HEADER) / 8
 
 // Functions for accessing the list node:
-func flnSize(node BNode) int
-func flnNext(node BNode) uint64
-func flnPtr(node BNode, idx int) uint64
-func flnSetPtr(node BNode, idx int, ptr uint64)
-func flnSetHeader(node BNode, size uint16, next uint64)
-func flnSetTotal(node BNode, total uint64)
+func flnSize(node BNode) int {
+	size := binary.LittleEndian.Uint16(node.data[2:4])
+	return int(size)
+}
+
+func flnNext(node BNode) uint64 {
+	nextPtr := binary.LittleEndian.Uint64(node.data[12:20])
+	return nextPtr
+}
+
+func flnPtr(node BNode, idx int) uint64 {
+	baseOffset := 20
+	ptrSize := 8
+	offset := baseOffset + idx*ptrSize
+
+	ptr := binary.LittleEndian.Uint64(node.data[offset : offset+ptrSize])
+	return ptr
+}
+
+func flnSetPtr(node BNode, idx int, ptr uint64) {
+	baseOffset := 20
+	ptrSize := 8
+	offset := baseOffset + idx*ptrSize
+
+	binary.LittleEndian.PutUint64(node.data[offset:offset+ptrSize], ptr)
+}
+
+func flnSetHeader(node BNode, size uint16, next uint64) {
+	binary.LittleEndian.PutUint16(node.data[2:4], size)
+	binary.LittleEndian.PutUint64(node.data[12:20], next)
+}
+
+func flnSetTotal(node BNode, total uint64) {
+	totalOffset := 4
+	binary.LittleEndian.PutUint64(node.data[totalOffset:totalOffset+8], total)
+}
 
 // number of items in the list
-func (fl *FreeList) Total() int
+func (fl *FreeList) Total() int {
+	if fl.head == 0 {
+		return 0
+	}
+
+	firstNode := fl.get(fl.head)
+	total := flnSize(firstNode)
+
+	return total
+}
 
 // get the nth pointer
 func (fl *FreeList) Get(topn int) uint64 {
