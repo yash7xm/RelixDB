@@ -1,6 +1,8 @@
 package BTree
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"testing"
 )
@@ -43,7 +45,6 @@ func TestKV_SetGet(t *testing.T) {
 		t.Fatalf("KV.Open() failed: %v", err)
 	}
 	defer kv.Close()
-
 
 	// Insert key-value pair
 	key := []byte("hello")
@@ -192,5 +193,158 @@ func TestKV_MasterPage(t *testing.T) {
 	retrievedVal, found := kv.Get(key)
 	if !found || string(retrievedVal) != string(val) {
 		t.Fatalf("KV.Get() after re-open failed: expected %s, got %s", val, retrievedVal)
+	}
+}
+
+func TestLargeDataInsert(t *testing.T) {
+	path := createTempFile(t)
+	defer os.Remove(path)
+
+	kv := KV{Path: path}
+
+	if err := kv.Open(); err != nil {
+		t.Fatalf("KV.Open() failed: %v", err)
+	}
+	defer kv.Close()
+
+	// Insert large number of key-value pairs
+	for i := 0; i < 100; i++ {
+		key := []byte(fmt.Sprintf("key%d", i))
+		value := []byte(fmt.Sprintf("value%d", i))
+		err := kv.Set(key, value)
+		if err != nil {
+			t.Fatalf("Failed to set key-value pair: %v", err)
+		}
+	}
+
+	// Verify that all data was inserted and can be retrieved correctly
+	for i := 0; i < 100; i++ {
+		key := []byte(fmt.Sprintf("key%d", i))
+		expectedValue := []byte(fmt.Sprintf("value%d", i))
+		retrieved, found := kv.Get(key)
+		if !found || !bytes.Equal(retrieved, expectedValue) {
+			t.Fatalf("Expected %s, got %s", expectedValue, retrieved)
+		}
+	}
+}
+
+func TestFreeListUsage(t *testing.T) {
+	path := createTempFile(t)
+	defer os.Remove(path)
+
+	kv := KV{Path: path}
+
+	if err := kv.Open(); err != nil {
+		t.Fatalf("KV.Open() failed: %v", err)
+	}
+	defer kv.Close()
+
+	// Insert and delete some keys to create free pages
+	for i := 0; i < 100; i++ {
+		key := []byte(fmt.Sprintf("key%d", i))
+		value := []byte(fmt.Sprintf("value%d", i))
+		err := kv.Set(key, value)
+		if err != nil {
+			t.Fatalf("Failed to set key-value pair: %v", err)
+		}
+	}
+
+	for i := 0; i < 100; i++ {
+		key := []byte(fmt.Sprintf("key%d", i))
+		_, err := kv.Del(key)
+		if err != nil {
+			t.Fatalf("Failed to delete key: %v", err)
+		}
+	}
+
+	// Insert new keys to check if free pages are reused
+	for i := 100; i < 200; i++ {
+		key := []byte(fmt.Sprintf("key%d", i))
+		value := []byte(fmt.Sprintf("value%d", i))
+		err := kv.Set(key, value)
+		if err != nil {
+			t.Fatalf("Failed to set key-value pair: %v", err)
+		}
+	}
+}
+
+// TestPersistence tests whether the database persists data correctly across reopenings.
+func TestPersistence(t *testing.T) {
+	path := createTempFile(t)
+	defer os.Remove(path)
+
+	kv := KV{Path: path}
+
+	if err := kv.Open(); err != nil {
+		t.Fatalf("KV.Open() failed: %v", err)
+	}
+	// Insert some values
+	key1 := []byte("key1")
+	value1 := []byte("value1")
+	key2 := []byte("key2")
+	value2 := []byte("value2")
+
+	err := kv.Set(key1, value1)
+	if err != nil {
+		t.Fatalf("Failed to set key1: %v", err)
+	}
+	err = kv.Set(key2, value2)
+	if err != nil {
+		t.Fatalf("Failed to set key2: %v", err)
+	}
+
+	// Close the kv
+	kv.Close()
+
+	// Reopen the kv
+	err = kv.Open()
+	if err != nil {
+		t.Fatalf("Failed to reopen kv: %v", err)
+	}
+	defer kv.Close()
+
+	// Check if the values persist
+	retrieved1, found1 := kv.Get(key1)
+	if !found1 || !bytes.Equal(retrieved1, value1) {
+		t.Fatalf("Expected %s, got %s", value1, retrieved1)
+	}
+
+	retrieved2, found2 := kv.Get(key2)
+	if !found2 || !bytes.Equal(retrieved2, value2) {
+		t.Fatalf("Expected %s, got %s", value2, retrieved2)
+	}
+}
+
+func TestOverwriteKey(t *testing.T) {
+	path := createTempFile(t)
+	defer os.Remove(path)
+
+	kv := KV{Path: path}
+
+	if err := kv.Open(); err != nil {
+		t.Fatalf("KV.Open() failed: %v", err)
+	}
+	defer kv.Close()
+
+	key := []byte("key1")
+	initialValue := []byte("initialValue")
+	newValue := []byte("newValue")
+
+	// Insert initial value
+	err := kv.Set(key, initialValue)
+	if err != nil {
+		t.Fatalf("Failed to set initial key-value pair: %v", err)
+	}
+
+	// Overwrite the value
+	err = kv.Set(key, newValue)
+	if err != nil {
+		t.Fatalf("Failed to overwrite key-value pair: %v", err)
+	}
+
+	// Retrieve the new value
+	retrieved, found := kv.Get(key)
+	if !found || !bytes.Equal(retrieved, newValue) {
+		t.Fatalf("Expected %s, got %s", newValue, retrieved)
 	}
 }

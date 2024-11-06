@@ -111,25 +111,19 @@ func mmapInit(fp *os.File) (int, []byte, error) {
 
 // extend the mmap by adding new mappings
 func extendMmap(db *KV, npages int) error {
-	requiredSize := npages * BTREE_PAGE_SIZE
-	if db.mmap.total >= requiredSize {
+	if db.mmap.total >= npages*BTREE_PAGE_SIZE {
 		return nil
 	}
 
-	newSize := db.mmap.total * 2
-	for newSize < requiredSize {
-		newSize *= 2
-	}
-
+	// double the address space
 	chunk, err := syscall.Mmap(
-		int(db.fp.Fd()), int64(db.mmap.total), newSize-db.mmap.total,
+		int(db.fp.Fd()), int64(db.mmap.total), db.mmap.total,
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED,
 	)
 	if err != nil {
 		return fmt.Errorf("mmap: %w", err)
 	}
-
-	db.mmap.total = newSize
+	db.mmap.total += db.mmap.total
 	db.mmap.chunks = append(db.mmap.chunks, chunk)
 	return nil
 }
