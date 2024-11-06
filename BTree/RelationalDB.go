@@ -162,8 +162,56 @@ func checkRecord(tdef *TableDef, rec Record, n int) ([]Value, error) {
 	return values, nil
 }
 
-func encodeValues(out []byte, vals []Value) []byte
-func decodeValues(in []byte, out []Value)
+func encodeValues(out []byte, vals []Value) []byte {
+	for _, val := range vals {
+		// Append the type
+		buf := make([]byte, 4)
+		binary.BigEndian.PutUint32(buf, val.Type)
+		out = append(out, buf...)
+
+		switch val.Type {
+		case TYPE_INT64:
+			// Append int64 as 8 bytes
+			buf := make([]byte, 8)
+			binary.BigEndian.PutUint64(buf, uint64(val.I64))
+			out = append(out, buf...)
+		case TYPE_BYTES:
+			// Append length and then the byte array
+			buf := make([]byte, 4)
+			binary.BigEndian.PutUint32(buf, uint32(len(val.Str)))
+			out = append(out, buf...)
+			out = append(out, val.Str...)
+		default:
+			panic("unsupported value type")
+		}
+	}
+	return out
+}
+
+func decodeValues(in []byte, out []Value) {
+	offset := 0
+	for i := range out {
+		// Read the type (4 bytes)
+		out[i].Type = binary.BigEndian.Uint32(in[offset : offset+4])
+		offset += 4
+
+		switch out[i].Type {
+		case TYPE_INT64:
+			// Read int64 (8 bytes)
+			out[i].I64 = int64(binary.BigEndian.Uint64(in[offset : offset+8]))
+			offset += 8
+		case TYPE_BYTES:
+			// Read the length of the byte array (4 bytes)
+			length := binary.BigEndian.Uint32(in[offset : offset+4])
+			offset += 4
+			// Read the byte array
+			out[i].Str = in[offset : offset+int(length)]
+			offset += int(length)
+		default:
+			panic("unsupported value type")
+		}
+	}
+}
 
 // for primary keys
 func encodeKey(out []byte, prefix uint32, vals []Value) []byte {
