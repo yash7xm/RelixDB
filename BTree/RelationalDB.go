@@ -136,15 +136,30 @@ func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
 // n == tdef.PKeys: record is excatly a primary key
 // n == len(tdef.Cols): record containse all columns.
 func checkRecord(tdef *TableDef, rec Record, n int) ([]Value, error) {
-	if n == tdef.PKeys {
-		return rec.Vals, nil
+	if len(rec.Cols) < n {
+		return nil, fmt.Errorf("missing columns in the record: expected at least %d, got %d", n, len(rec.Cols))
 	}
 
-	if n == len(tdef.Cols) {
-		return rec.Vals, nil
+	values := make([]Value, len(tdef.Cols))
+
+	// Check that all necessary columns are present in the record
+	colMap := map[string]Value{}
+	for i, col := range rec.Cols {
+		colMap[col] = rec.Vals[i]
 	}
 
-	return rec.Vals, fmt.Errorf("record is not valid")
+	// Rearrange columns according to table definition
+	for i, col := range tdef.Cols {
+		val, ok := colMap[col]
+		if !ok && i < tdef.PKeys {
+			// Primary key column is missing, return error
+			return nil, fmt.Errorf("missing primary key column: %s", col)
+		}
+
+		values[i] = val
+	}
+
+	return values, nil
 }
 
 func encodeValues(out []byte, vals []Value) []byte
