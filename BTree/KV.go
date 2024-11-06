@@ -54,6 +54,11 @@ func (db *KV) Open() (err error) {
 	db.tree.new = db.pageNew
 	db.tree.del = db.pageDel
 
+	// FreeList callbacks
+	db.free.get = db.pageGet
+	db.free.new = db.pageAppend
+	db.free.use = db.pageUse
+
 	// read the master page
 	err = masterLoad(db)
 	if err != nil {
