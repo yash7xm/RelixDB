@@ -49,6 +49,8 @@ func (db *KV) Open() (err error) {
 	db.mmap.total = len(chunk)
 	db.mmap.chunks = [][]byte{chunk}
 
+	db.page.updates = make(map[uint64][]byte)
+
 	// BTree callbacks
 	db.tree.get = db.pageGet
 	db.tree.new = db.pageNew
@@ -109,20 +111,25 @@ func mmapInit(fp *os.File) (int, []byte, error) {
 
 // extend the mmap by adding new mappings
 func extendMmap(db *KV, npages int) error {
-	if db.mmap.total >= npages*BTREE_PAGE_SIZE {
+	requiredSize := npages * BTREE_PAGE_SIZE
+	if db.mmap.total >= requiredSize {
 		return nil
 	}
 
-	// double the address space
+	newSize := db.mmap.total * 2
+	for newSize < requiredSize {
+		newSize *= 2
+	}
+
 	chunk, err := syscall.Mmap(
-		int(db.fp.Fd()), int64(db.mmap.total), db.mmap.total,
+		int(db.fp.Fd()), int64(db.mmap.total), newSize-db.mmap.total,
 		syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED,
 	)
 	if err != nil {
 		return fmt.Errorf("mmap: %w", err)
 	}
 
-	db.mmap.total += db.mmap.total
+	db.mmap.total = newSize
 	db.mmap.chunks = append(db.mmap.chunks, chunk)
 	return nil
 }
@@ -319,7 +326,10 @@ func syncPages(db *KV) error {
 	if err := db.fp.Sync(); err != nil {
 		return fmt.Errorf("fscync: %w", err)
 	}
-	db.page.flushed += uint64(len(db.page.updates))
+
+	db.page.flushed += uint64(db.page.nappend)
+	db.page.nappend = 0
+	// db.page.flushed += uint64(len(db.page.updates))
 	// think this
 	// db.page.updates = db.page.updates[0]
 
