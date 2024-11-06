@@ -277,8 +277,52 @@ type InsertReq struct {
 	Mode int
 }
 
-func (tree *BTree) InsertEx(req *InsertReq)
-func (db *KV) Update(key []byte, val []byte, mode int) (bool, error)
+func (tree *BTree) InsertEx(req *InsertReq) {
+	// Retrieve the current value associated with the key, if any
+	_, found := tree.Get(req.Key)
+
+	switch req.Mode {
+	case MODE_UPSERT:
+		if found {
+			// Replace the existing value
+			tree.Insert(req.Key, req.Val)
+			// tree.Set(req.Key, req.Val)
+			req.Added = false // no new key was added
+		} else {
+			// Insert the new key-value pair
+			tree.Insert(req.Key, req.Val)
+			req.Added = true // a new key was added
+		}
+	case MODE_UPDATE_ONLY:
+		if found {
+			// Update the existing value
+			tree.Insert(req.Key, req.Val)
+			req.Added = false
+		} else {
+			req.Added = false // no key was added
+		}
+	case MODE_INSERT_ONLY:
+		if !found {
+			// Insert the new key-value pair
+			tree.Insert(req.Key, req.Val)
+			req.Added = true
+		} else {
+			req.Added = false // no key was added
+		}
+	default:
+		panic("unsupported mode")
+	}
+}
+
+func (db *KV) Update(key []byte, val []byte, mode int) (bool, error) {
+	req := &InsertReq{
+        Key:  key,
+        Val:  val,
+        Mode: mode,
+    }
+    db.tree.InsertEx(req)
+    return req.Added, nil
+}
 
 // add a row to the table
 func dbUpdate(db *DB, tdef *TableDef, rec Record, mode int) (bool, error) {
