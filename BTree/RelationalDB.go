@@ -102,24 +102,24 @@ var TDEF_TABLE = &TableDef{
 }
 
 // get a single row by primary key
-func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
-	values, err := checkRecord(tdef, *rec, tdef.PKeys)
-	if err != nil {
-		return false, err
-	}
-	key := encodeKey(nil, tdef.Prefix, values[:tdef.PKeys])
-	val, ok := db.kv.Get(key)
-	if !ok {
-		return false, nil
-	}
-	for i := tdef.PKeys; i < len(tdef.Cols); i++ {
-		values[i].Type = tdef.Types[i]
-	}
-	decodeValues(val, values[tdef.PKeys:])
-	rec.Cols = append(rec.Cols, tdef.Cols[tdef.PKeys:]...)
-	rec.Vals = append(rec.Vals, values[tdef.PKeys:]...)
-	return true, nil
-}
+// func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
+// 	values, err := checkRecord(tdef, *rec, tdef.PKeys)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	key := encodeKey(nil, tdef.Prefix, values[:tdef.PKeys])
+// 	val, ok := db.kv.Get(key)
+// 	if !ok {
+// 		return false, nil
+// 	}
+// 	for i := tdef.PKeys; i < len(tdef.Cols); i++ {
+// 		values[i].Type = tdef.Types[i]
+// 	}
+// 	decodeValues(val, values[tdef.PKeys:])
+// 	rec.Cols = append(rec.Cols, tdef.Cols[tdef.PKeys:]...)
+// 	rec.Vals = append(rec.Vals, values[tdef.PKeys:]...)
+// 	return true, nil
+// }
 
 // reorder a record and check for missing columns.
 // n == tdef.PKeys: record is excatly a primary key
@@ -476,10 +476,24 @@ type BIter struct {
 }
 
 // get the current KV pair
-func (iter *BIter) Deref() ([]byte, []byte)
+func (iter *BIter) Deref() ([]byte, []byte) {
+	if !iter.Valid() {
+		return []byte(""), []byte("")
+	}
+	node := iter.path[len(iter.path)-1]
+	key := node.getKey(iter.pos[len(iter.pos)-1])
+	val := node.getVal(iter.pos[len(iter.pos)-1])
+
+	return key, val
+}
 
 // precondition of the Deref()
-func (iter *BIter) Valid() bool
+func (iter *BIter) Valid() bool {
+	if len(iter.path) == 0 {
+		return false
+	}
+	return true
+}
 
 // moving backward and forward
 func (iter *BIter) Next() {
@@ -582,5 +596,101 @@ func cmpOK(key []byte, cmp int, ref []byte) bool {
 		return r <= 0
 	default:
 		panic("what?")
+	}
+}
+
+// the iterator for range queries
+type Scanner struct {
+	// the range, from Key1 to Key2
+	Cmp1 int // CMP_??
+	Cmp2 int
+	Key1 Record
+	Key2 Record
+	// internal
+	tdef   *TableDef
+	iter   *BIter // the underlying B-tree iterator
+	keyEnd []byte // the encoded Key2
+}
+
+// fetch the current row
+func (sc *Scanner) Deref(rec *Record) {
+	for i, col := range rec.Cols {
+		fmt.Printf("%v | %v", col, rec.Vals[i])
+	}
+}
+
+func (db *DB) Scan(table string, req *Scanner) error {
+	tdef := getTableDef(db, table)
+	if tdef == nil {
+		return fmt.Errorf("table not found: %s", table)
+	}
+	return dbScan(db, tdef, req)
+}
+
+func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
+	// sanity checks
+	switch {
+	case req.Cmp1 > 0 && req.Cmp2 < 0:
+	case req.Cmp2 > 0 && req.Cmp1 < 0:
+	default:
+		return fmt.Errorf("bad range")
+	}
+
+	values1, err := checkRecord(tdef, req.Key1, tdef.PKeys)
+	if err != nil {
+		return err
+	}
+
+	values2, err := checkRecord(tdef, req.Key2, tdef.PKeys)
+	if err != nil {
+		return err
+	}
+
+	req.tdef = tdef
+	// seek to the start key
+	keyStart := encodeKey(nil, tdef.Prefix, values1[:tdef.PKeys])
+	req.keyEnd = encodeKey(nil, tdef.Prefix, values2[:tdef.PKeys])
+	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
+	return nil
+}
+
+// within the range or not?
+func (sc *Scanner) Valid() bool {
+	if !sc.iter.Valid() {
+		return false
+	}
+	key, _ := sc.iter.Deref()
+	return cmpOK(key, sc.Cmp2, sc.keyEnd)
+}
+
+// move the underlying B-tree iterator
+func (sc *Scanner) Next() {
+	Assert(sc.Valid(), "scanner is not valid")
+	if sc.Cmp1 > 0 {
+		sc.iter.Next()
+	} else {
+		sc.iter.Prev()
+	}
+}
+
+// get a single row by the primary key
+func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
+	// just a shortcut for the scan operation
+	sc := Scanner{
+		Cmp1: CMP_GE,
+		Cmp2: CMP_LE,
+		Key1: *rec,
+		Key2: *rec,
+	}
+
+	if err := dbScan(db, tdef, &sc); err != nil {
+		return false, err
+	}
+
+	if sc.Valid() {
+		sc.Deref(rec)
+		return true, nil
+	} else {
+		return false, nil
 	}
 }
