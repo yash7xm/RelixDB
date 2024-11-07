@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 )
 
 const (
@@ -192,53 +193,53 @@ func escapeString(in []byte) []byte {
 	return out
 }
 
-func decodeValues(in []byte, out []Value) []Value {
-	i := 0
-	for i < len(in) {
-		switch {
-		case in[i] == TYPE_INT64:
-			var buf [8]byte
-			copy(buf[:], in[i+1:i+9])
-			u := binary.BigEndian.Uint64(buf[:])
-			v := int64(u - (1 << 63)) // Reverse the sign bit flip
-			out = append(out, Value{Type: TYPE_INT64, I64: v})
-			i += 9 // Move index past type and 8 bytes of integer
+// func decodeValues(in []byte, out []Value) []Value {
+// 	i := 0
+// 	for i < len(in) {
+// 		switch {
+// 		case in[i] == TYPE_INT64:
+// 			var buf [8]byte
+// 			copy(buf[:], in[i+1:i+9])
+// 			u := binary.BigEndian.Uint64(buf[:])
+// 			v := int64(u - (1 << 63)) // Reverse the sign bit flip
+// 			out = append(out, Value{Type: TYPE_INT64, I64: v})
+// 			i += 9 // Move index past type and 8 bytes of integer
 
-		case in[i] == TYPE_BYTES:
-			str, bytesRead := unescapeString(in[i+1:])
-			out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
-			i += bytesRead + 1 // Move index past type and read bytes
+// 		case in[i] == TYPE_BYTES:
+// 			str, bytesRead := unescapeString(in[i+1:])
+// 			out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
+// 			i += bytesRead + 1 // Move index past type and read bytes
 
-		default:
-			panic("unknown type")
-		}
-	}
-	return out
-}
+// 		default:
+// 			panic("unknown type")
+// 		}
+// 	}
+// 	return out
+// }
 
 // unescapeString reverses the escapeString process
-func unescapeString(in []byte) (string, int) {
-	out := make([]byte, 0, len(in))
-	i := 0
-	for i < len(in) {
-		if in[i] == 0x01 {
-			if in[i+1] == 0x01 {
-				out = append(out, 0) // "\x01\x01" -> "\x00"
-			} else if in[i+1] == 0x02 {
-				out = append(out, 0x01) // "\x01\x02" -> "\x01"
-			} else {
-				panic("invalid escape sequence")
-			}
-			i += 2 // Move past the escape sequence
-		} else if in[i] == 0 {
-			break // Null-terminator found, end of string
-		} else {
-			out = append(out, in[i])
-			i++
-		}
-	}
-	return string(out), i
-}
+// func unescapeString(in []byte) (string, int) {
+// 	out := make([]byte, 0, len(in))
+// 	i := 0
+// 	for i < len(in) {
+// 		if in[i] == 0x01 {
+// 			if in[i+1] == 0x01 {
+// 				out = append(out, 0) // "\x01\x01" -> "\x00"
+// 			} else if in[i+1] == 0x02 {
+// 				out = append(out, 0x01) // "\x01\x02" -> "\x01"
+// 			} else {
+// 				panic("invalid escape sequence")
+// 			}
+// 			i += 2 // Move past the escape sequence
+// 		} else if in[i] == 0 {
+// 			break // Null-terminator found, end of string
+// 		} else {
+// 			out = append(out, in[i])
+// 			i++
+// 		}
+// 	}
+// 	return string(out), i
+// }
 
 // for primary keys
 func encodeKey(out []byte, prefix uint32, vals []Value) []byte {
@@ -424,14 +425,19 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	ok, err = dbGet(db, TDEF_META, meta)
 	Assert(err == nil, "error in getting def")
 	if ok {
-		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
+		pr := string(meta.Get("val").Str)
+		prefix, _ := strconv.Atoi(pr)
+		tdef.Prefix = uint32(prefix)
+		// tdef.Prefix = uint32(meta.Get("val").I64)
 		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "prefix lower than min")
 	} else {
 		meta.AddStr("val", make([]byte, 4))
 	}
 
 	// update the next prefix
-	binary.LittleEndian.PutUint32(meta.Get("val").Str, tdef.Prefix+1)
+	// binary.LittleEndian.PutUint32(meta.Get("val").I64, tdef.Prefix+1)
+	str := strconv.Itoa(int(tdef.Prefix)+1)
+	meta.AddStr("val", []byte(str))
 	_, err = dbUpdate(db, TDEF_META, *meta, 0)
 	if err != nil {
 		return err
