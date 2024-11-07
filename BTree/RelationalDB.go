@@ -475,6 +475,12 @@ type BIter struct {
 	pos  []uint16 // indexes into nodes
 }
 
+// get the current KV pair
+func (iter *BIter) Deref() ([]byte, []byte)
+
+// precondition of the Deref()
+func (iter *BIter) Valid() bool
+
 // moving backward and forward
 func (iter *BIter) Next() {
 	iterNext(iter, len(iter.path)-1)
@@ -517,5 +523,64 @@ func iterPrev(iter *BIter, level int) {
 		kid := iter.tree.get(node.getPtr(iter.pos[level]))
 		iter.path[level+1] = kid
 		iter.pos[level+1] = kid.nkeys() - 1
+	}
+}
+
+// find the closest position that is less or equal to the input key
+func (tree *BTree) SeekLE(key []byte) *BIter {
+	iter := &BIter{tree: tree}
+	for ptr := tree.root; ptr != 0; {
+		node := tree.get(ptr)
+		idx := nodeLookupLE(node, key)
+		iter.path = append(iter.path, node)
+		iter.pos = append(iter.pos, idx)
+		if node.btype() == BNODE_NODE {
+			ptr = node.getPtr(idx)
+		} else {
+			ptr = 0
+		}
+	}
+	return iter
+}
+
+const (
+	CMP_GE = +3 // >=
+	CMP_GT = +2 // >
+	CMP_LT = -2 // <
+	CMP_LE = -3 // <=
+)
+
+// find the closest position to a key with respect to `cmp` relation
+func (tree *BTree) Seek(key []byte, cmp int) *BIter {
+	iter := tree.SeekLE(key)
+	if cmp != CMP_LE && iter.Valid() {
+		curr, _ := iter.Deref()
+		if !cmpOK(curr, cmp, key) {
+			// off by one
+			if cmp > 0 {
+				iter.Next()
+			} else {
+				iter.Prev()
+			}
+		}
+	}
+
+	return iter
+}
+
+// key cmp ref
+func cmpOK(key []byte, cmp int, ref []byte) bool {
+	r := bytes.Compare(key, ref)
+	switch cmp {
+	case CMP_GE:
+		return r >= 0
+	case CMP_GT:
+		return r > 0
+	case CMP_LT:
+		return r < 0
+	case CMP_LE:
+		return r <= 0
+	default:
+		panic("what?")
 	}
 }
