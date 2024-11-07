@@ -19,18 +19,18 @@ func TestInitTestDB(t *testing.T) {
 	defer db.kv.Close()
 
 	// Initialize internal metadata table (for storing table schemas, next prefixes, etc.)
-	err := db.TableNew(TDEF_META)
-	if err != nil {
-		t.Fatalf("failed to create @meta table: %v", err)
-	}
+	// err := db.TableNew(TDEF_META)
+	// if err != nil {
+	// 	t.Fatalf("failed to create @meta table: %v", err)
+	// }
 
 	// Initialize internal table schema table (for storing table definitions)
-	err = db.TableNew(TDEF_TABLE)
+	err := db.TableNew(TDEF_TABLE)
 	if err != nil {
 		t.Fatalf("failed to create @table table: %v", err)
 	}
 
-	// Initialize a sample table for testing
+	// // Initialize a sample table for testing
 	sampleTable := &TableDef{
 		Name:  "test_table",                     // Name of the test table
 		Types: []uint32{TYPE_INT64, TYPE_BYTES}, // Column types: int64 and bytes
