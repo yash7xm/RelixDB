@@ -2,6 +2,7 @@ package BTree
 
 import (
 	"fmt"
+	"os"
 	"testing"
 )
 
@@ -12,6 +13,8 @@ func TestInitTestDB(t *testing.T) {
 		kv:     KV{Path: "testdb"}, // Initialize the underlying KV store (assuming you have a NewKV() constructor)
 		tables: make(map[string]*TableDef),
 	}
+
+	defer os.Remove("testdb")
 
 	if err := db.kv.Open(); err != nil {
 		fmt.Printf("KV.Open() failed: %v", err)

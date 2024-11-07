@@ -60,6 +60,7 @@ func (rec *Record) AddInt64(key string, val int64) *Record {
 func (rec *Record) Get(key string) *Value {
 	// Find the value for the corresponding column
 	for i, col := range rec.Cols {
+		fmt.Println(col)
 		if col == key {
 			return &rec.Vals[i]
 		}
@@ -436,7 +437,7 @@ func (db *DB) TableNew(tdef *TableDef) error {
 
 	// update the next prefix
 	// binary.LittleEndian.PutUint32(meta.Get("val").I64, tdef.Prefix+1)
-	str := strconv.Itoa(int(tdef.Prefix)+1)
+	str := strconv.Itoa(int(tdef.Prefix) + 1)
 	meta.AddStr("val", []byte(str))
 	_, err = dbUpdate(db, TDEF_META, *meta, 0)
 	if err != nil {
@@ -617,6 +618,8 @@ type Scanner struct {
 
 // fetch the current row
 func (sc *Scanner) Deref(rec *Record) {
+	fmt.Println(len(rec.Cols))
+	fmt.Println(len(rec.Vals))
 	for i, col := range rec.Cols {
 		fmt.Printf("%v | %s\n", col, string(rec.Vals[i].Str))
 	}
