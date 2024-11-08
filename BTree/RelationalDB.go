@@ -78,12 +78,14 @@ type DB struct {
 // table defination
 type TableDef struct {
 	// user defined
-	Name  string
-	Types []uint32 // column types
-	Cols  []string // column names
-	PKeys int      // the first `PKeys` columns are the primary key
+	Name    string
+	Types   []uint32 // column types
+	Cols    []string // column names
+	PKeys   int      // the first `PKeys` columns are the primary key
+	Indexes [][]string
 	// auto-assigned B-tree key prefixes for different tables
-	Prefix uint32
+	Prefix        uint32
+	IndexPrefixes []uint32
 }
 
 // internal table : metadata
@@ -685,4 +687,30 @@ func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
 	} else {
 		return false, nil
 	}
+}
+
+func checkIndexKeys(tdef *TableDef, index []string) ([]string, error) {
+	icols := map[string]bool{}
+	for _, c := range index {
+		// check the index columns
+		// omitted...
+		icols[c] = true
+	}
+	// add the primary key to the index
+	for _, c := range tdef.Cols[:tdef.PKeys] {
+		if !icols[c] {
+			index = append(index, c)
+		}
+	}
+	Assert(len(index) < len(tdef.Cols), "index length is larger than columns length")
+	return index, nil
+}
+
+func colIndex(tdef *TableDef, col string) int {
+	for i, c := range tdef.Cols {
+		if c == col {
+			return i
+		}
+	}
+	return -1
 }
