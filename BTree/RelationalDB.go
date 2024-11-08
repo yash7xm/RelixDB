@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"strconv"
 )
 
 const (
@@ -194,53 +193,36 @@ func escapeString(in []byte) []byte {
 	return out
 }
 
-// func decodeValues(in []byte, out []Value) []Value {
-// 	i := 0
-// 	for i < len(in) {
-// 		switch {
-// 		case in[i] == TYPE_INT64:
-// 			var buf [8]byte
-// 			copy(buf[:], in[i+1:i+9])
-// 			u := binary.BigEndian.Uint64(buf[:])
-// 			v := int64(u - (1 << 63)) // Reverse the sign bit flip
-// 			out = append(out, Value{Type: TYPE_INT64, I64: v})
-// 			i += 9 // Move index past type and 8 bytes of integer
-
-// 		case in[i] == TYPE_BYTES:
-// 			str, bytesRead := unescapeString(in[i+1:])
-// 			out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
-// 			i += bytesRead + 1 // Move index past type and read bytes
-
-// 		default:
-// 			panic("unknown type")
-// 		}
-// 	}
-// 	return out
-// }
+func decodeValues(in []byte, out []Value) []Value {
+	str, _ := unescapeString(in[:])
+	fmt.Printf("EscapedStr: %v \n", str)
+	out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
+	return out
+}
 
 // unescapeString reverses the escapeString process
-// func unescapeString(in []byte) (string, int) {
-// 	out := make([]byte, 0, len(in))
-// 	i := 0
-// 	for i < len(in) {
-// 		if in[i] == 0x01 {
-// 			if in[i+1] == 0x01 {
-// 				out = append(out, 0) // "\x01\x01" -> "\x00"
-// 			} else if in[i+1] == 0x02 {
-// 				out = append(out, 0x01) // "\x01\x02" -> "\x01"
-// 			} else {
-// 				panic("invalid escape sequence")
-// 			}
-// 			i += 2 // Move past the escape sequence
-// 		} else if in[i] == 0 {
-// 			break // Null-terminator found, end of string
-// 		} else {
-// 			out = append(out, in[i])
-// 			i++
-// 		}
-// 	}
-// 	return string(out), i
-// }
+func unescapeString(in []byte) (string, int) {
+	out := make([]byte, 0, len(in))
+	i := 0
+	for i < len(in) {
+		if in[i] == 0x01 {
+			if in[i+1] == 0x01 {
+				out = append(out, 0) // "\x01\x01" -> "\x00"
+			} else if in[i+1] == 0x02 {
+				out = append(out, 0x01) // "\x01\x02" -> "\x01"
+			} else {
+				panic("invalid escape sequence")
+			}
+			i += 2 // Move past the escape sequence
+		} else if in[i] == 0 {
+			break // Null-terminator found, end of string
+		} else {
+			out = append(out, in[i])
+			i++
+		}
+	}
+	return string(out), i
+}
 
 // for primary keys
 func encodeKey(out []byte, prefix uint32, vals []Value) []byte {
@@ -414,7 +396,7 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	// check the existing table
 	table := (&Record{}).AddStr("name", []byte(tdef.Name))
 	ok, err := dbGet(db, TDEF_TABLE, table)
-	Assert(err == nil, "error")
+	Assert(err == nil, "error in getting table def")
 	if ok {
 		return fmt.Errorf("table exists: %s", tdef.Name)
 	}
@@ -424,21 +406,22 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	tdef.Prefix = TABLE_PREFIX_MIN
 	meta := (&Record{}).AddStr("key", []byte("next_prefix"))
 	ok, err = dbGet(db, TDEF_META, meta)
-	Assert(err == nil, "error in getting def")
+	Assert(err == nil, "error in getting meta table")
 	if ok {
-		pr := string(meta.Get("val").Str)
-		prefix, _ := strconv.Atoi(pr)
-		tdef.Prefix = uint32(prefix)
-		// tdef.Prefix = uint32(meta.Get("val").I64)
+		// pr := string(meta.Get("val").Str)
+		// prefix, _ := strconv.Atoi(pr)
+		// tdef.Prefix = uint32(prefix)
+		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
 		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "prefix lower than min")
 	} else {
 		meta.AddStr("val", make([]byte, 4))
 	}
 
 	// update the next prefix
-	// binary.LittleEndian.PutUint32(meta.Get("val").I64, tdef.Prefix+1)
-	str := strconv.Itoa(int(tdef.Prefix) + 1)
-	meta.AddStr("val", []byte(str))
+	binary.LittleEndian.PutUint32(meta.Get("val").Str, tdef.Prefix+1)
+	// str := strconv.Itoa(int(tdef.Prefix) + 1)
+	// meta.AddStr("val", []byte(str))
+
 	_, err = dbUpdate(db, TDEF_META, *meta, 0)
 	if err != nil {
 		return err
@@ -490,8 +473,10 @@ func (iter *BIter) Deref() ([]byte, []byte) {
 	node := iter.path[len(iter.path)-1]
 	key := node.getKey(iter.pos[len(iter.pos)-1])
 	val := node.getVal(iter.pos[len(iter.pos)-1])
+	v := []Value{}
+	v = decodeValues(val, v)
 
-	return key, val
+	return key, v[0].Str
 }
 
 // precondition of the Deref()
@@ -509,20 +494,23 @@ func (iter *BIter) Prev() {
 }
 
 func iterNext(iter *BIter, level int) {
-	if iter.pos[level] > 0 {
-		iter.pos[level]++ // move within this node
-	} else if level < len(iter.path) {
-		iterNext(iter, level+1) // move to a sibling node
+	// Check if we can move right within the current node at this level
+	node := iter.path[level]
+	if iter.pos[level] < node.nkeys()-1 {
+		iter.pos[level]++ // Move right within this node
+	} else if level > 0 {
+		// If we are at the last key, move up to the parent and then continue
+		iterNext(iter, level-1) // Move up to parent node
 	} else {
-		return // dummy key
+		return // No more keys (we are done)
 	}
 
+	// If there are more levels, move to the leftmost child of the next key
 	if level+1 < len(iter.pos) {
-		// update the kid node
 		node := iter.path[level]
-		kid := iter.tree.get(node.getPtr(iter.pos[level]))
-		iter.path[level+1] = kid
-		iter.pos[level+1] = kid.nkeys() - 1
+		kid := iter.tree.get(node.getPtr(iter.pos[level])) // Get the child pointer
+		iter.path[level+1] = kid                           // Move to the child node
+		iter.pos[level+1] = 0                              // Set position at the first key
 	}
 }
 
@@ -618,8 +606,6 @@ type Scanner struct {
 
 // fetch the current row
 func (sc *Scanner) Deref(rec *Record) {
-	fmt.Println(len(rec.Cols))
-	fmt.Println(len(rec.Vals))
 	for i, col := range rec.Cols {
 		fmt.Printf("%v | %s\n", col, string(rec.Vals[i].Str))
 	}
