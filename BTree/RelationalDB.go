@@ -453,9 +453,6 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	ok, err = dbGet(db, TDEF_META, meta)
 	Assert(err == nil, "error in getting meta table")
 	if ok {
-		// pr := string(meta.Get("val").Str)
-		// prefix, _ := strconv.Atoi(pr)
-		// tdef.Prefix = uint32(prefix)
 		tdef.Prefix = binary.LittleEndian.Uint32(meta.Get("val").Str)
 		Assert(tdef.Prefix > TABLE_PREFIX_MIN, "prefix lower than min")
 	} else {
@@ -674,10 +671,13 @@ func (sc *Scanner) Deref(rec *Record) {
 
 	if sc.indexNo < 0 {
 		// primary key decode the KV pair
+		rec.Vals = make([]Value, 2)
+		rec.Vals[0] = Value{Type: TYPE_BYTES, Str: key}
+		rec.Vals[1] = Value{Type: TYPE_BYTES, Str: val}
 	} else {
 		// secondary index
 		// the "value" part of the KV store is not used by indexes
-		Assert(len(val) == 0, "value is present to defre index")
+		Assert(len(val) == 0, "value is present to deref index")
 
 		// decode the primary key first
 		index := tdef.Indexes[sc.indexNo]
@@ -715,7 +715,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 		return fmt.Errorf("bad range")
 	}
 
-	// select an index
+	//  select an index
 	indexNo, err := findIndex(tdef, req.Key1.Cols)
 	if err != nil {
 		return err
@@ -726,7 +726,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 	}
 	req.db = db
 	req.tdef = tdef
-	req.indexNo = indexNo
+	req.indexNo = -1
 
 	// seek to the start key
 	keyStart := encodeKeyPartial(

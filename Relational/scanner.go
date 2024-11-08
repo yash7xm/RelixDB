@@ -1,70 +1,10 @@
 package relational
 
 import (
-	"bytes"
 	"fmt"
 
 	BTree "github.com/yash7xm/RelixDB/BTree"
 )
-
-// find the closest position that is less or equal to the input key
-func (tree *BTree.BTree) SeekLE(key []byte) *BIter {
-	iter := &BIter{tree: tree}
-	for ptr := tree.root; ptr != 0; {
-		node := tree.get(ptr)
-		idx := nodeLookupLE(node, key)
-		iter.path = append(iter.path, node)
-		iter.pos = append(iter.pos, idx)
-		if node.btype() == BNODE_NODE {
-			ptr = node.getPtr(idx)
-		} else {
-			ptr = 0
-		}
-	}
-	return iter
-}
-
-const (
-	CMP_GE = +3 // >=
-	CMP_GT = +2 // >
-	CMP_LT = -2 // <
-	CMP_LE = -3 // <=
-)
-
-// find the closest position to a key with respect to `cmp` relation
-func (tree *BTree) Seek(key []byte, cmp int) *BIter {
-	iter := tree.SeekLE(key)
-	if cmp != CMP_LE && iter.Valid() {
-		curr, _ := iter.Deref()
-		if !cmpOK(curr, cmp, key) {
-			// off by one
-			if cmp > 0 {
-				iter.Next()
-			} else {
-				iter.Prev()
-			}
-		}
-	}
-
-	return iter
-}
-
-// key cmp ref
-func cmpOK(key []byte, cmp int, ref []byte) bool {
-	r := bytes.Compare(key, ref)
-	switch cmp {
-	case CMP_GE:
-		return r >= 0
-	case CMP_GT:
-		return r > 0
-	case CMP_LT:
-		return r < 0
-	case CMP_LE:
-		return r <= 0
-	default:
-		panic("what?")
-	}
-}
 
 // the iterator for range queries
 type Scanner struct {
@@ -151,7 +91,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 		nil, prefix, req.Key1.Vals, tdef, index, req.Cmp1)
 	req.keyEnd = encodeKeyPartial(
 		nil, prefix, req.Key2.Vals, tdef, index, req.Cmp2)
-	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
+	req.iter = BTree.Seek(keyStart, req.Cmp1)
 	return nil
 }
 
@@ -161,7 +101,7 @@ func (sc *Scanner) Valid() bool {
 		return false
 	}
 	key, _ := sc.iter.Deref()
-	return cmpOK(key, sc.Cmp2, sc.keyEnd)
+	return BTree.CmpOK(key, sc.Cmp2, sc.keyEnd)
 }
 
 // move the underlying B-tree iterator
@@ -178,8 +118,8 @@ func (sc *Scanner) Next() {
 func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
 	// just a shortcut for the scan operation
 	sc := Scanner{
-		Cmp1: CMP_GE,
-		Cmp2: CMP_LE,
+		Cmp1: BTree.CMP_GE,
+		Cmp2: BTree.CMP_LE,
 		Key1: *rec,
 		Key2: *rec,
 	}
