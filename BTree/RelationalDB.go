@@ -172,8 +172,10 @@ func encodeValues(out []byte, vals []Value) []byte {
 	return out
 }
 
-// Strings are encoded as nul terminated strings,
-// escape the nul byte so that strings contain no nul byte.
+// 1. strings are encoded as null-terminated strings,
+// escape the null byte so that strings contain no null byte.
+// 2. "\xff" represents the highest order in key comparisons,
+// also escape the first byte if it's 0xff.
 func escapeString(in []byte) []byte {
 	zeros := bytes.Count(in, []byte{0})
 	ones := bytes.Count(in, []byte{1})
@@ -182,6 +184,12 @@ func escapeString(in []byte) []byte {
 	}
 	out := make([]byte, len(in)+zeros+ones)
 	pos := 0
+	if len(in) > 0 && in[0] >= 0xfe {
+		out[0] = 0xfe
+		out[1] = in[0]
+		pos += 2
+		in = in[1:]
+	}
 	for _, ch := range in {
 		if ch <= 1 {
 			out[pos+0] = 0x01
@@ -790,4 +798,68 @@ func indexOp(db *DB, tdef *TableDef, rec Record, op int) {
 		Assert(err == nil, "error encountered in indexOP") // XXX: will fix this in later chapters
 		Assert(done, "error encountered in doing update or del in indexOp")
 	}
+}
+
+func findIndex(tdef *TableDef, keys []string) (int, error) {
+	pk := tdef.Cols[:tdef.PKeys]
+	if isPrefix(pk, keys) {
+		// use the primary key.
+		// also works for full table scans without a key.
+		return -1, nil
+	}
+
+	// find a suitable index
+	winner := -2
+	for i, index := range tdef.Indexes {
+		if !isPrefix(index, keys) {
+			continue
+		}
+		if winner == -2 || len(index) < len(tdef.Indexes[winner]) {
+			winner = i
+		}
+	}
+	if winner == -2 {
+		return -2, fmt.Errorf("no index found")
+	}
+	return winner, nil
+}
+
+func isPrefix(long []string, short []string) bool {
+	if len(long) < len(short) {
+		return false
+	}
+	for i, c := range short {
+		if long[i] != c {
+			return false
+		}
+	}
+	return true
+}
+
+// The range key can be a prefix of the index key,
+// we may have to encode missing columns to make the comparison work.
+func encodeKeyPartial(
+	out []byte, prefix uint32, values []Value,
+	tdef *TableDef, keys []string, cmp int,
+) []byte {
+	out = encodeKey(out, prefix, values)
+	// Encode the missing columns as either minimum or maximum values,
+	// depending on the comparison operator.
+	// 1. The empty string is lower than all possible value encodings,
+	// thus we don't need to add anything for CMP_LT and CMP_GE.
+	// 2. The maximum encodings are all 0xff bytes.
+	max := cmp == CMP_GT || cmp == CMP_LE
+loop:
+	for i := len(values); max && i < len(keys); i++ {
+		switch tdef.Types[colIndex(tdef, keys[i])] {
+		case TYPE_BYTES:
+			out = append(out, 0xff)
+			break loop // stops here since no string encoding starts with 0xff
+		case TYPE_INT64:
+			out = append(out, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
+		default:
+			panic("what?")
+		}
+	}
+	return out
 }
