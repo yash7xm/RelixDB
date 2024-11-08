@@ -1,6 +1,7 @@
 package relational
 
 import (
+	"encoding/json"
 	"fmt"
 
 	BTree "github.com/yash7xm/RelixDB/BTree"

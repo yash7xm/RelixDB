@@ -59,7 +59,6 @@ func (rec *Record) AddInt64(key string, val int64) *Record {
 func (rec *Record) Get(key string) *Value {
 	// Find the value for the corresponding column
 	for i, col := range rec.Cols {
-		fmt.Println(col)
 		if col == key {
 			return &rec.Vals[i]
 		}
@@ -205,7 +204,6 @@ func escapeString(in []byte) []byte {
 
 func decodeValues(in []byte, out []Value) []Value {
 	str, _ := unescapeString(in[:])
-	fmt.Printf("EscapedStr: %v \n", str)
 	out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
 	return out
 }
@@ -300,13 +298,13 @@ type InsertReq struct {
 	Mode int
 }
 
-type DeleteReq struct {
-	tree *BTree
-	// in
-	Key []byte
-	// out
-	Old []byte
-}
+// type DeleteReq struct {
+// 	tree *BTree
+// 	// in
+// 	Key []byte
+// 	// out
+// 	Old []byte
+// }
 
 func (db *KV) InsertEx(req *InsertReq) {
 	// Retrieve the current value associated with the key, if any
@@ -344,7 +342,10 @@ func (db *KV) InsertEx(req *InsertReq) {
 		panic("unsupported mode")
 	}
 }
-func (tree *BTree) DeleteEx(req *DeleteReq)
+
+// func (tree *BTree) DeleteEx(req *DeleteReq) {
+
+// }
 
 func (db *KV) Update(req *InsertReq) (bool, error) {
 	// req := &InsertReq{
@@ -353,6 +354,7 @@ func (db *KV) Update(req *InsertReq) (bool, error) {
 	// 	Val:  val,
 	// 	Mode: mode,
 	// }
+	req.tree = &db.tree
 	db.InsertEx(req)
 	return req.Added, nil
 }
@@ -654,15 +656,45 @@ type Scanner struct {
 	Key1 Record
 	Key2 Record
 	// internal
-	tdef   *TableDef
-	iter   *BIter // the underlying B-tree iterator
-	keyEnd []byte // the encoded Key2
+	db      *DB
+	tdef    *TableDef
+	indexNo int    // -1: use the primary key; >= 0: use an index
+	iter    *BIter // the underlying B-tree iterator
+	keyEnd  []byte // the encoded Key2
 }
 
 // fetch the current row
 func (sc *Scanner) Deref(rec *Record) {
-	for i, col := range rec.Cols {
-		fmt.Printf("%v | %s\n", col, string(rec.Vals[i].Str))
+	Assert(sc.Valid(), "scanner is not valid")
+
+	tdef := sc.tdef
+	rec.Cols = tdef.Cols
+	rec.Vals = rec.Vals[:0]
+	key, val := sc.iter.Deref()
+
+	if sc.indexNo < 0 {
+		// primary key decode the KV pair
+	} else {
+		// secondary index
+		// the "value" part of the KV store is not used by indexes
+		Assert(len(val) == 0, "value is present to defre index")
+
+		// decode the primary key first
+		index := tdef.Indexes[sc.indexNo]
+		ival := make([]Value, len(index))
+		for i, c := range index {
+			ival[i].Type = tdef.Types[colIndex(tdef, c)]
+		}
+		decodeValues(key[4:], ival)
+		icol := Record{index, ival}
+		// fetch the row by the primary key
+		rec.Cols = tdef.Cols[:tdef.PKeys]
+		for _, c := range rec.Cols {
+			rec.Vals = append(rec.Vals, *icol.Get(c))
+		}
+		// TODO: skip this if the index contains all the columns
+		ok, err := dbGet(sc.db, tdef, rec)
+		Assert(ok && err == nil, "error encoutered while dereferencing the current row by secondary index")
 	}
 }
 
@@ -683,20 +715,24 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 		return fmt.Errorf("bad range")
 	}
 
-	values1, err := checkRecord(tdef, req.Key1, tdef.PKeys)
+	// select an index
+	indexNo, err := findIndex(tdef, req.Key1.Cols)
 	if err != nil {
 		return err
 	}
-
-	values2, err := checkRecord(tdef, req.Key2, tdef.PKeys)
-	if err != nil {
-		return err
+	index, prefix := tdef.Cols[:tdef.PKeys], tdef.Prefix
+	if indexNo >= 0 {
+		index, prefix = tdef.Indexes[indexNo], tdef.IndexPrefixes[indexNo]
 	}
-
+	req.db = db
 	req.tdef = tdef
+	req.indexNo = indexNo
+
 	// seek to the start key
-	keyStart := encodeKey(nil, tdef.Prefix, values1[:tdef.PKeys])
-	req.keyEnd = encodeKey(nil, tdef.Prefix, values2[:tdef.PKeys])
+	keyStart := encodeKeyPartial(
+		nil, prefix, req.Key1.Vals, tdef, index, req.Cmp1)
+	req.keyEnd = encodeKeyPartial(
+		nil, prefix, req.Key2.Vals, tdef, index, req.Cmp2)
 	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
 	return nil
 }
