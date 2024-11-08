@@ -418,12 +418,14 @@ func (db *DB) TableNew(tdef *TableDef) error {
 	} else {
 		meta.AddStr("val", make([]byte, 4))
 	}
+	for i := range tdef.Indexes {
+		prefix := tdef.Prefix + 1 + uint32(i)
+		tdef.IndexPrefixes = append(tdef.IndexPrefixes, prefix)
+	}
 
 	// update the next prefix
-	binary.LittleEndian.PutUint32(meta.Get("val").Str, tdef.Prefix+1)
-	// str := strconv.Itoa(int(tdef.Prefix) + 1)
-	// meta.AddStr("val", []byte(str))
-
+	ntree := 1 + uint32(len(tdef.Indexes))
+	binary.LittleEndian.PutUint32(meta.Get("val").Str, tdef.Prefix+ntree)
 	_, err = dbUpdate(db, TDEF_META, *meta, 0)
 	if err != nil {
 		return err
@@ -438,6 +440,7 @@ func (db *DB) TableNew(tdef *TableDef) error {
 }
 
 func tableDefCheck(tdef *TableDef) error {
+	// verify the table definition
 	if len(tdef.Cols) == 0 || len(tdef.Types) == 0 {
 		return fmt.Errorf("table definition must have at least one column and one type")
 	}
@@ -454,6 +457,15 @@ func tableDefCheck(tdef *TableDef) error {
 		if tdef.Types[i] != TYPE_INT64 && tdef.Types[i] != TYPE_BYTES {
 			return fmt.Errorf("primary key columns must be of type int64 or bytes")
 		}
+	}
+
+	// verify the indexes
+	for i, index := range tdef.Indexes {
+		index, err := checkIndexKeys(tdef, index)
+		if err != nil {
+			return err
+		}
+		tdef.Indexes[i] = index
 	}
 
 	return nil
