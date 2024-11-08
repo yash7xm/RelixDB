@@ -283,11 +283,21 @@ const (
 type InsertReq struct {
 	tree *BTree
 	// out
-	Added bool // added a new key
+	Added   bool   // added a new key
+	Updated bool   // added a new key or an old key was changed
+	Old     []byte // the value before the update
 	// in
 	Key  []byte
 	Val  []byte
 	Mode int
+}
+
+type DeleteReq struct {
+	tree *BTree
+	// in
+	Key []byte
+	// out
+	Old []byte
 }
 
 func (db *KV) InsertEx(req *InsertReq) {
@@ -326,14 +336,15 @@ func (db *KV) InsertEx(req *InsertReq) {
 		panic("unsupported mode")
 	}
 }
+func (tree *BTree) DeleteEx(req *DeleteReq)
 
-func (db *KV) Update(key []byte, val []byte, mode int) (bool, error) {
-	req := &InsertReq{
-		tree: &db.tree,
-		Key:  key,
-		Val:  val,
-		Mode: mode,
-	}
+func (db *KV) Update(req *InsertReq) (bool, error) {
+	// req := &InsertReq{
+	// 	tree: &db.tree,
+	// 	Key:  key,
+	// 	Val:  val,
+	// 	Mode: mode,
+	// }
 	db.InsertEx(req)
 	return req.Added, nil
 }
@@ -346,7 +357,20 @@ func dbUpdate(db *DB, tdef *TableDef, rec Record, mode int) (bool, error) {
 	}
 	key := encodeKey(nil, tdef.Prefix, values[:tdef.PKeys])
 	val := encodeValues(nil, values[tdef.PKeys:])
-	return db.kv.Update(key, val, mode)
+	req := InsertReq{Key: key, Val: val, Mode: mode}
+	added, err := db.kv.Update(&req)
+	if err != nil || !req.Updated || len(tdef.Indexes) == 0 {
+		return added, err
+	}
+	// maintain indexes
+	if req.Updated && !req.Added {
+		decodeValues(req.Old, values[tdef.PKeys:]) // get the old row
+		indexOp(db, tdef, Record{tdef.Cols, values}, INDEX_DEL)
+	}
+	if req.Updated {
+		indexOp(db, tdef, rec, INDEX_ADD)
+	}
+	return added, nil
 }
 
 // add a record
@@ -377,7 +401,16 @@ func dbDelete(db *DB, tdef *TableDef, rec Record) (bool, error) {
 		return false, err
 	}
 	key := encodeKey(nil, tdef.Prefix, values[:tdef.PKeys])
-	return db.kv.Del(key)
+
+	deleted, err := db.kv.Del(key)
+	if err != nil || !deleted || len(tdef.Indexes) == 0 {
+		return deleted, err
+	}
+	// maintain indexes
+	if deleted {
+		indexOp(db, tdef, rec, INDEX_DEL)
+	}
+	return true, nil
 }
 
 func (db *DB) Delete(table string, rec Record) (bool, error) {
@@ -725,4 +758,36 @@ func colIndex(tdef *TableDef, col string) int {
 		}
 	}
 	return -1
+}
+
+const (
+	INDEX_ADD = 1
+	INDEX_DEL = 2
+)
+
+// maintain indexes after a record is added or removed
+func indexOp(db *DB, tdef *TableDef, rec Record, op int) {
+	key := make([]byte, 0, 256)
+	irec := make([]Value, len(tdef.Cols))
+
+	for i, index := range tdef.Indexes {
+		// the indexed key
+		for j, c := range index {
+			irec[j] = *rec.Get(c)
+		}
+
+		// update the key value store
+		key = encodeKey(key[:0], tdef.IndexPrefixes[i], irec[:len(index)])
+		done, err := false, error(nil)
+		switch op {
+		case INDEX_ADD:
+			done, err = db.kv.Update(&InsertReq{Key: key})
+		case INDEX_DEL:
+			done, err = db.kv.Del(key)
+		default:
+			panic("what?")
+		}
+		Assert(err == nil, "error encountered in indexOP") // XXX: will fix this in later chapters
+		Assert(done, "error encountered in doing update or del in indexOp")
+	}
 }
