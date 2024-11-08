@@ -92,3 +92,31 @@ func encodeKey(out []byte, prefix uint32, vals []Value) []byte {
 	out = encodeValues(out, vals)
 	return out
 }
+
+// The range key can be a prefix of the index key,
+// we may have to encode missing columns to make the comparison work.
+func encodeKeyPartial(
+	out []byte, prefix uint32, values []Value,
+	tdef *TableDef, keys []string, cmp int,
+) []byte {
+	out = encodeKey(out, prefix, values)
+	// Encode the missing columns as either minimum or maximum values,
+	// depending on the comparison operator.
+	// 1. The empty string is lower than all possible value encodings,
+	// thus we don't need to add anything for CMP_LT and CMP_GE.
+	// 2. The maximum encodings are all 0xff bytes.
+	max := cmp == CMP_GT || cmp == CMP_LE
+loop:
+	for i := len(values); max && i < len(keys); i++ {
+		switch tdef.Types[colIndex(tdef, keys[i])] {
+		case TYPE_BYTES:
+			out = append(out, 0xff)
+			break loop // stops here since no string encoding starts with 0xff
+		case TYPE_INT64:
+			out = append(out, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
+		default:
+			panic("what?")
+		}
+	}
+	return out
+}
