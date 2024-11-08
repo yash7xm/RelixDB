@@ -17,12 +17,14 @@ type DB struct {
 // table defination
 type TableDef struct {
 	// user defined
-	Name  string
-	Types []uint32 // column types
-	Cols  []string // column names
-	PKeys int      // the first `PKeys` columns are the primary key
+	Name    string
+	Types   []uint32 // column types
+	Cols    []string // column names
+	PKeys   int      // the first `PKeys` columns are the primary key
+	Indexes [][]string
 	// auto-assigned B-tree key prefixes for different tables
-	Prefix uint32
+	Prefix        uint32
+	IndexPrefixes []uint32
 }
 
 // internal table : metadata
