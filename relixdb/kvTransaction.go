@@ -124,4 +124,6 @@ func (kv *KV) EndRead(tx *KVReader) {
 }
 
 // callback for BTree & FreeList, dereference a pointer.
-func (tx *KVReader) pageGetMapped(ptr uint64) BNode
+func (tx *KVReader) pageGetMapped(ptr uint64) BNode {
+	return BNode{}
+}
