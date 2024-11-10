@@ -56,6 +56,33 @@ func extendMmap(db *KV, npages int) error {
 	return nil
 }
 
+// extend the file to atleadt `npages`.
+func extendFile(db *KV, npages int) error {
+	filePages := db.mmap.file / BTREE_PAGE_SIZE
+	if filePages >= npages {
+		return nil
+	}
+
+	for filePages < npages {
+		// the file size is increased exponentially
+		// so that we don't have to extend the size for every update.
+		inc := filePages / 8
+		if inc < 1 {
+			inc = 1
+		}
+		filePages += inc
+	}
+
+	fileSize := filePages * BTREE_PAGE_SIZE
+	err := syscall.Fallocate(int(db.fp.Fd()), 0, 0, int64(fileSize))
+	if err != nil {
+		return fmt.Errorf("fallocate: %w", err)
+	}
+
+	db.mmap.file = fileSize
+	return nil
+}
+
 const DB_SIG = "RelxDBYashPoonia"
 
 // the master page format.
@@ -101,32 +128,5 @@ func masterStore(db *KV) error {
 	if err != nil {
 		return fmt.Errorf("write master page: %w", err)
 	}
-	return nil
-}
-
-// extend the file to atleadt `npages`.
-func extendFile(db *KV, npages int) error {
-	filePages := db.mmap.file / BTREE_PAGE_SIZE
-	if filePages >= npages {
-		return nil
-	}
-
-	for filePages < npages {
-		// the file size is increased exponentially
-		// so that we don't have to extend the size for every update.
-		inc := filePages / 8
-		if inc < 1 {
-			inc = 1
-		}
-		filePages += inc
-	}
-
-	fileSize := filePages * BTREE_PAGE_SIZE
-	err := syscall.Fallocate(int(db.fp.Fd()), 0, 0, int64(fileSize))
-	if err != nil {
-		return fmt.Errorf("fallocate: %w", err)
-	}
-
-	db.mmap.file = fileSize
 	return nil
 }
