@@ -60,6 +60,15 @@ func (db *KV) pageUse(ptr uint64, node BNode) {
 	db.page.updates[ptr] = node.data
 }
 
+// persist the newly allocated pages after updates
+func flushPages(db *KV) error {
+	if err := writePages(db); err != nil {
+		return err
+	}
+
+	return syncPages(db)
+}
+
 func writePages(db *KV) error {
 	// update the free list
 	freed := []uint64{}

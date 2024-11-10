@@ -96,12 +96,3 @@ func (db *KV) Del(key []byte) (bool, error) {
 	deleted := db.tree.Delete(key)
 	return deleted, flushPages(db)
 }
-
-// persist the newly allocated pages after updates
-func flushPages(db *KV) error {
-	if err := writePages(db); err != nil {
-		return err
-	}
-
-	return syncPages(db)
-}
