@@ -111,8 +111,6 @@ func getTableDefDB(db *DB, name string) *TableDef {
 }
 
 // Create new table
-const TABLE_PREFIX_MIN = 1
-
 func (db *DB) TableNew(tdef *TableDef) error {
 	if err := tableDefCheck(tdef); err != nil {
 		return err

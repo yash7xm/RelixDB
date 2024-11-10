@@ -5,19 +5,6 @@ import (
 	"fmt"
 )
 
-const (
-	TYPE_ERROR = 0
-	TYPE_BYTES = 1
-	TYPE_INT64 = 2
-)
-
-// modes of the updates
-const (
-	MODE_UPSERT      = 0 // insert or replace
-	MODE_UPDATE_ONLY = 1 // update existing keys
-	MODE_INSERT_ONLY = 2 // only add new keys
-)
-
 type InsertReq struct {
 	tree *BTree
 	// out
@@ -161,13 +148,6 @@ func (tree *BTree) SeekLE(key []byte) *BIter {
 	}
 	return iter
 }
-
-const (
-	CMP_GE = +3 // >=
-	CMP_GT = +2 // >
-	CMP_LT = -2 // <
-	CMP_LE = -3 // <=
-)
 
 // find the closest position to a key with respect to `cmp` relation
 func (tree *BTree) Seek(key []byte, cmp int) *BIter {

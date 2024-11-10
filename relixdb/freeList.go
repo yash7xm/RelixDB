@@ -10,10 +10,6 @@ type FreeList struct {
 	use func(uint64, BNode) // reuse a page
 }
 
-const BNODE_FREE_LIST = 3
-const FREE_LIST_HEADER = 4 + 8 + 8
-const FREE_LIST_CAP = (BTREE_PAGE_SIZE - FREE_LIST_HEADER) / 8
-
 // Functions for accessing the list node:
 func flnSize(node BNode) int {
 	size := binary.LittleEndian.Uint16(node.data[2:4])

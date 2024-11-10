@@ -28,11 +28,6 @@ func colIndex(tdef *TableDef, col string) int {
 	return -1
 }
 
-const (
-	INDEX_ADD = 1
-	INDEX_DEL = 2
-)
-
 // maintain indexes after a record is added or removed
 func indexOp(db *DB, tdef *TableDef, rec Record, op int) {
 	key := make([]byte, 0, 256)

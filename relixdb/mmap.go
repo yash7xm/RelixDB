@@ -83,8 +83,6 @@ func extendFile(db *KV, npages int) error {
 	return nil
 }
 
-const DB_SIG = "RelxDBYashPoonia"
-
 // the master page format.
 // it contains the pointer to the root and other important bits.
 // | sig | btree_root | page_used |
