@@ -1,9 +1,7 @@
-package relational
+package BTree
 
 import (
 	"fmt"
-
-	BTree "github.com/yash7xm/RelixDB/BTree"
 )
 
 // the iterator for range queries
@@ -23,7 +21,7 @@ type Scanner struct {
 
 // fetch the current row
 func (sc *Scanner) Deref(rec *Record) {
-	BTree.Assert(sc.Valid(), "scanner is not valid")
+	Assert(sc.Valid(), "scanner is not valid")
 
 	tdef := sc.tdef
 	rec.Cols = tdef.Cols
@@ -32,10 +30,13 @@ func (sc *Scanner) Deref(rec *Record) {
 
 	if sc.indexNo < 0 {
 		// primary key decode the KV pair
+		rec.Vals = make([]Value, 2)
+		rec.Vals[0] = Value{Type: TYPE_BYTES, Str: key}
+		rec.Vals[1] = Value{Type: TYPE_BYTES, Str: val}
 	} else {
 		// secondary index
-		// the "value" part of the KV store is not used by inde
-		BTree.Assert(len(val) == 0, "value is present to defre index")
+		// the "value" part of the KV store is not used by indexes
+		Assert(len(val) == 0, "value is present to deref index")
 
 		// decode the primary key first
 		index := tdef.Indexes[sc.indexNo]
@@ -52,7 +53,7 @@ func (sc *Scanner) Deref(rec *Record) {
 		}
 		// TODO: skip this if the index contains all the columns
 		ok, err := dbGet(sc.db, tdef, rec)
-		BTree.Assert(ok && err == nil, "error encoutered while dereferencing the current row by secondary index")
+		Assert(ok && err == nil, "error encoutered while dereferencing the current row by secondary index")
 	}
 }
 
@@ -73,7 +74,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 		return fmt.Errorf("bad range")
 	}
 
-	// select an index
+	//  select an index
 	indexNo, err := findIndex(tdef, req.Key1.Cols)
 	if err != nil {
 		return err
@@ -84,14 +85,14 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 	}
 	req.db = db
 	req.tdef = tdef
-	req.indexNo = indexNo
+	req.indexNo = -1
 
 	// seek to the start key
 	keyStart := encodeKeyPartial(
 		nil, prefix, req.Key1.Vals, tdef, index, req.Cmp1)
 	req.keyEnd = encodeKeyPartial(
 		nil, prefix, req.Key2.Vals, tdef, index, req.Cmp2)
-	req.iter = BTree.Seek(keyStart, req.Cmp1)
+	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
 	return nil
 }
 
@@ -101,12 +102,12 @@ func (sc *Scanner) Valid() bool {
 		return false
 	}
 	key, _ := sc.iter.Deref()
-	return BTree.CmpOK(key, sc.Cmp2, sc.keyEnd)
+	return cmpOK(key, sc.Cmp2, sc.keyEnd)
 }
 
 // move the underlying B-tree iterator
 func (sc *Scanner) Next() {
-	BTree.Assert(sc.Valid(), "scanner is not valid")
+	Assert(sc.Valid(), "scanner is not valid")
 	if sc.Cmp1 > 0 {
 		sc.iter.Next()
 	} else {
@@ -118,8 +119,8 @@ func (sc *Scanner) Next() {
 func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
 	// just a shortcut for the scan operation
 	sc := Scanner{
-		Cmp1: BTree.CMP_GE,
-		Cmp2: BTree.CMP_LE,
+		Cmp1: CMP_GE,
+		Cmp2: CMP_LE,
 		Key1: *rec,
 		Key2: *rec,
 	}
