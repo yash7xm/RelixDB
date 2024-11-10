@@ -3,6 +3,8 @@ package relational
 import (
 	"bytes"
 	"encoding/binary"
+
+	BTree "github.com/yash7xm/RelixDB/BTree"
 )
 
 func encodeValues(out []byte, vals []Value) []byte {
@@ -105,7 +107,7 @@ func encodeKeyPartial(
 	// 1. The empty string is lower than all possible value encodings,
 	// thus we don't need to add anything for CMP_LT and CMP_GE.
 	// 2. The maximum encodings are all 0xff bytes.
-	max := cmp == CMP_GT || cmp == CMP_LE
+	max := cmp == BTree.CMP_GT || cmp == BTree.CMP_LE
 loop:
 	for i := len(values); max && i < len(keys); i++ {
 		switch tdef.Types[colIndex(tdef, keys[i])] {

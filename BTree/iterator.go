@@ -1,12 +1,9 @@
-package relational
+package BTree
 
-import (
-	BTree "github.com/yash7xm/RelixDB/BTree"
-)
 
 type BIter struct {
-	tree *BTree.BTree
-	path []BTree.BNode // from root to leaf
+	tree *BTree
+	path []BNode // from root to leaf
 	pos  []uint16      // indexes into nodes
 }
 
