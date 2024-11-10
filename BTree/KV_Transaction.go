@@ -1,16 +1,20 @@
 package BTree
 
-import "fmt"
+import (
+	"container/heap"
+	"fmt"
+)
 
 // KV transaction
 type KVTX struct {
+	KVReader
 	db *KV
-	// for the roolback
-	tree struct {
-		root uint64
-	}
-	free struct {
-		head uint64
+	free FreeList
+	page struct {
+		nappend int // number of pages to be appended
+		// newly allocated or deallocated pages keyed by the pointer.
+		// nil value denotes a deallocated page.
+		updates map[uint64][]byte
 	}
 }
 
@@ -92,3 +96,34 @@ func (tx *KVTX) Update(req *InsertReq) bool {
 func (tx *KVTX) Del(key []byte) (bool, error) {
 	return tx.db.Del(key)
 }
+
+// read-only KV transactions
+type KVReader struct {
+	// the snapshot
+	version uint64
+	tree    BTree
+	mmap    struct {
+		chunks [][]byte // copied from struct KV. read-only.
+	}
+	// for removing from the heap
+	index int
+}
+
+func (kv *KV) BeginRead(tx *KVReader) {
+	kv.mu.Lock()
+	tx.mmap.chunks = kv.mmap.chunks
+	tx.tree.root = kv.tree.root
+	tx.tree.get = tx.pageGetMapped
+	tx.version = kv.version
+	heap.Push(&kv.readers, tx)
+	kv.mu.Unlock()
+}
+
+func (kv *KV) EndRead(tx *KVReader) {
+	kv.mu.Lock()
+	heap.Remove(&kv.readers, tx.index)
+	kv.mu.Unlock()
+}
+
+// callback for BTree & FreeList, dereference a pointer.
+func (tx *KVReader) pageGetMapped(ptr uint64) BNode

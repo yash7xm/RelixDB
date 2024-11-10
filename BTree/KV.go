@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"syscall"
 )
 
@@ -13,7 +14,9 @@ type KV struct {
 	Path string
 	// internals
 	fp   *os.File
-	tree BTree
+	tree struct {
+		root uint64
+	}
 	mmap struct {
 		file   int      // file size, can be larger than the database size
 		total  int      // mmap size, can be larger than the file size
@@ -27,8 +30,14 @@ type KV struct {
 		// nil value denotes a deallocated page
 		updates map[uint64][]byte
 	}
-	free FreeList
+	free    FreeList
+	mu      sync.Mutex
+	writer  sync.Mutex
+	version uint64
+	readers ReaderList // heap, for tracking the minimum reader version
 }
+
+type ReaderList []*KVReader
 
 func (db *KV) Open() (err error) {
 	// open or create the DB file
