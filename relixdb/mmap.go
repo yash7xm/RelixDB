@@ -56,28 +56,6 @@ func extendMmap(db *KV, npages int) error {
 	return nil
 }
 
-// callback for BTree & FreeList, dereference a pointer.
-func (db *KV) pageGet(ptr uint64) BNode {
-	if page, ok := db.page.updates[ptr]; ok {
-		Assert(page != nil, "page not found")
-		return BNode{page} // for new pages
-	}
-	return pageGetMapped(db, ptr) // for written pages
-}
-
-func pageGetMapped(db *KV, ptr uint64) BNode {
-	start := uint64(0)
-	for _, chunk := range db.mmap.chunks {
-		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
-		if ptr < end {
-			offset := BTREE_PAGE_SIZE * (ptr - start)
-			return BNode{chunk[offset : offset+BTREE_PAGE_SIZE]}
-		}
-		start = end
-	}
-	panic("bad ptr")
-}
-
 const DB_SIG = "RelxDBYashPoonia"
 
 // the master page format.
@@ -124,42 +102,6 @@ func masterStore(db *KV) error {
 		return fmt.Errorf("write master page: %w", err)
 	}
 	return nil
-}
-
-// callback for BTree, allocate a new page.
-func (db *KV) pageNew(node BNode) uint64 {
-	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node data excceds page size")
-	ptr := uint64(0)
-	if db.page.nfree < db.free.Total() {
-		// reuse a deallocated page
-		ptr = db.free.Get(db.page.nfree)
-		db.page.nfree++
-	} else {
-		// append a new page
-		ptr = db.page.flushed + uint64(db.page.nappend)
-		db.page.nappend++
-	}
-	db.page.updates[ptr] = node.data
-	return ptr
-}
-
-// callback for BTree, deallocate a page
-func (db *KV) pageDel(ptr uint64) {
-	db.page.updates[ptr] = nil
-}
-
-// callback for FreeList, allocate a new page.
-func (db *KV) pageAppend(node BNode) uint64 {
-	Assert(len(node.data) <= BTREE_PAGE_SIZE, "node data excceds page size")
-	ptr := db.page.flushed + uint64(db.page.nappend)
-	db.page.nappend++
-	db.page.updates[ptr] = node.data
-	return ptr
-}
-
-// callback for FreeList, reuse a page.
-func (db *KV) pageUse(ptr uint64, node BNode) {
-	db.page.updates[ptr] = node.data
 }
 
 // extend the file to atleadt `npages`.
