@@ -1,5 +1,7 @@
 package BTree
 
+import "fmt"
+
 // KV transaction
 type KVTX struct {
 	db *KV
@@ -32,4 +34,43 @@ func roolbackTX(tx *KVTX) {
 // end a transaction: roolback
 func (kv *KV) Abort(tx *KVTX) {
 	roolbackTX(tx)
+}
+
+// end a transaction: commit updates
+func (kv *KV) Commit(tx *KVTX) error {
+	if kv.tree.root == tx.tree.root {
+		return nil // no updates?
+	}
+
+	// phase 1: persist the page data to disk.
+	if err := writePages(kv); err != nil {
+		roolbackTX(tx)
+		return err
+	}
+
+	// the page data must reach disk before the master page.
+	// the `fsync` serves as a barrier here.
+	if err := kv.fp.Sync(); err != nil {
+		roolbackTX(tx)
+		return fmt.Errorf("fsync: %w", err)
+	}
+
+	// the transaction is visible at this point.
+	kv.page.flushed += uint64(kv.page.nappend)
+	kv.page.nfree = 0
+	kv.page.nappend = 0
+	kv.page.updates = map[uint64][]byte{}
+
+	// phase 2: update the master page to point to the new tree.
+	// NOTE: Cannot rollback the tree to the old version if phase 2 fails.
+	//		 Because there is no way to know the state of the master page.
+	//		 Updating from an old root can cause corruption.
+
+	if err := masterStore(kv); err != nil {
+		return err
+	}
+	if err := kv.fp.Sync(); err != nil {
+		return fmt.Errorf("fsync: %w", err)
+	}
+	return nil
 }
