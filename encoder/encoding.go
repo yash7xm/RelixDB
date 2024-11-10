@@ -1,11 +1,11 @@
-package encoding
+package encoder
 
 import (
 	"bytes"
 	"encoding/binary"
 
 	BTree "github.com/yash7xm/RelixDB/BTree"
-	Table "github.com/yash7xm/RelixDB/Relational"
+	Table "github.com/yash7xm/RelixDB/table"
 )
 
 func EncodeValues(out []byte, vals []Table.Value) []byte {

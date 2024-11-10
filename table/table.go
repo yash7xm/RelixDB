@@ -1,4 +1,4 @@
-package relational
+package table
 
 import (
 	"encoding/json"

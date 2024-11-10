@@ -1,4 +1,4 @@
-package relational
+package table
 
 const (
 	TYPE_ERROR = 0
