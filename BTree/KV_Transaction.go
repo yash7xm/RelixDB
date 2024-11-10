@@ -74,3 +74,21 @@ func (kv *KV) Commit(tx *KVTX) error {
 	}
 	return nil
 }
+
+// KV operations
+func (tx *KVTX) Get(key []byte) ([]byte, bool) {
+	return tx.db.tree.Get(key)
+}
+
+func (tx *KVTX) Seek(key []byte, cmp int) *BIter {
+	return tx.db.tree.Seek(key, cmp)
+}
+
+func (tx *KVTX) Update(req *InsertReq) bool {
+	tx.db.InsertEx(req)
+	return req.Added
+}
+
+func (tx *KVTX) Del(key []byte) (bool, error) {
+	return tx.db.Del(key)
+}

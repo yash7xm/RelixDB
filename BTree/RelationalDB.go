@@ -103,26 +103,6 @@ var TDEF_TABLE = &TableDef{
 	PKeys: 1,
 }
 
-// get a single row by primary key
-// func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
-// 	values, err := checkRecord(tdef, *rec, tdef.PKeys)
-// 	if err != nil {
-// 		return false, err
-// 	}
-// 	key := encodeKey(nil, tdef.Prefix, values[:tdef.PKeys])
-// 	val, ok := db.kv.Get(key)
-// 	if !ok {
-// 		return false, nil
-// 	}
-// 	for i := tdef.PKeys; i < len(tdef.Cols); i++ {
-// 		values[i].Type = tdef.Types[i]
-// 	}
-// 	decodeValues(val, values[tdef.PKeys:])
-// 	rec.Cols = append(rec.Cols, tdef.Cols[tdef.PKeys:]...)
-// 	rec.Vals = append(rec.Vals, values[tdef.PKeys:]...)
-// 	return true, nil
-// }
-
 // reorder a record and check for missing columns.
 // n == tdef.PKeys: record is excatly a primary key
 // n == len(tdef.Cols): record containse all columns.
@@ -298,14 +278,6 @@ type InsertReq struct {
 	Mode int
 }
 
-// type DeleteReq struct {
-// 	tree *BTree
-// 	// in
-// 	Key []byte
-// 	// out
-// 	Old []byte
-// }
-
 func (db *KV) InsertEx(req *InsertReq) {
 	// Retrieve the current value associated with the key, if any
 	_, found := db.Get(req.Key)
@@ -343,17 +315,7 @@ func (db *KV) InsertEx(req *InsertReq) {
 	}
 }
 
-// func (tree *BTree) DeleteEx(req *DeleteReq) {
-
-// }
-
 func (db *KV) Update(req *InsertReq) (bool, error) {
-	// req := &InsertReq{
-	// 	tree: &db.tree,
-	// 	Key:  key,
-	// 	Val:  val,
-	// 	Mode: mode,
-	// }
 	req.tree = &db.tree
 	db.InsertEx(req)
 	return req.Added, nil
@@ -511,81 +473,6 @@ func tableDefCheck(tdef *TableDef) error {
 	return nil
 }
 
-// Range queries
-
-// type BIter struct {
-// 	tree *BTree
-// 	path []BNode  // from root to leaf
-// 	pos  []uint16 // indexes into nodes
-// }
-
-// // get the current KV pair
-// func (iter *BIter) Deref() ([]byte, []byte) {
-// 	if !iter.Valid() {
-// 		return []byte(""), []byte("")
-// 	}
-// 	node := iter.path[len(iter.path)-1]
-// 	key := node.getKey(iter.pos[len(iter.pos)-1])
-// 	val := node.getVal(iter.pos[len(iter.pos)-1])
-// 	v := []Value{}
-// 	v = decodeValues(val, v)
-
-// 	return key, v[0].Str
-// }
-
-// // precondition of the Deref()
-// func (iter *BIter) Valid() bool {
-// 	return len(iter.path) != 0
-// }
-
-// // moving backward and forward
-// func (iter *BIter) Next() {
-// 	iterNext(iter, len(iter.path)-1)
-// }
-
-// func (iter *BIter) Prev() {
-// 	iterPrev(iter, len(iter.path)-1)
-// }
-
-// func iterNext(iter *BIter, level int) {
-// 	// Check if we can move right within the current node at this level
-// 	node := iter.path[level]
-// 	if iter.pos[level] < node.nkeys()-1 {
-// 		iter.pos[level]++ // Move right within this node
-// 	} else if level > 0 {
-// 		// If we are at the last key, move up to the parent and then continue
-// 		iterNext(iter, level-1) // Move up to parent node
-// 	} else {
-// 		return // No more keys (we are done)
-// 	}
-
-// 	// If there are more levels, move to the leftmost child of the next key
-// 	if level+1 < len(iter.pos) {
-// 		node := iter.path[level]
-// 		kid := iter.tree.get(node.getPtr(iter.pos[level])) // Get the child pointer
-// 		iter.path[level+1] = kid                           // Move to the child node
-// 		iter.pos[level+1] = 0                              // Set position at the first key
-// 	}
-// }
-
-// func iterPrev(iter *BIter, level int) {
-// 	if iter.pos[level] > 0 {
-// 		iter.pos[level]-- // move within this node
-// 	} else if level > 0 {
-// 		iterPrev(iter, level-1) // move to a sibling node
-// 	} else {
-// 		return // dummy key
-// 	}
-
-// 	if level+1 < len(iter.pos) {
-// 		// update the kid node
-// 		node := iter.path[level]
-// 		kid := iter.tree.get(node.getPtr(iter.pos[level]))
-// 		iter.path[level+1] = kid
-// 		iter.pos[level+1] = kid.nkeys() - 1
-// 	}
-// }
-
 // find the closest position that is less or equal to the input key
 func (tree *BTree) SeekLE(key []byte) *BIter {
 	iter := &BIter{tree: tree}
@@ -644,139 +531,6 @@ func cmpOK(key []byte, cmp int, ref []byte) bool {
 		panic("what?")
 	}
 }
-
-// // the iterator for range queries
-// type Scanner struct {
-// 	// the range, from Key1 to Key2
-// 	Cmp1 int // CMP_??
-// 	Cmp2 int
-// 	Key1 Record
-// 	Key2 Record
-// 	// internal
-// 	db      *DB
-// 	tdef    *TableDef
-// 	indexNo int    // -1: use the primary key; >= 0: use an index
-// 	iter    *BIter // the underlying B-tree iterator
-// 	keyEnd  []byte // the encoded Key2
-// }
-
-// // fetch the current row
-// func (sc *Scanner) Deref(rec *Record) {
-// 	Assert(sc.Valid(), "scanner is not valid")
-
-// 	tdef := sc.tdef
-// 	rec.Cols = tdef.Cols
-// 	rec.Vals = rec.Vals[:0]
-// 	key, val := sc.iter.Deref()
-
-// 	if sc.indexNo < 0 {
-// 		// primary key decode the KV pair
-// 		rec.Vals = make([]Value, 2)
-// 		rec.Vals[0] = Value{Type: TYPE_BYTES, Str: key}
-// 		rec.Vals[1] = Value{Type: TYPE_BYTES, Str: val}
-// 	} else {
-// 		// secondary index
-// 		// the "value" part of the KV store is not used by indexes
-// 		Assert(len(val) == 0, "value is present to deref index")
-
-// 		// decode the primary key first
-// 		index := tdef.Indexes[sc.indexNo]
-// 		ival := make([]Value, len(index))
-// 		for i, c := range index {
-// 			ival[i].Type = tdef.Types[colIndex(tdef, c)]
-// 		}
-// 		decodeValues(key[4:], ival)
-// 		icol := Record{index, ival}
-// 		// fetch the row by the primary key
-// 		rec.Cols = tdef.Cols[:tdef.PKeys]
-// 		for _, c := range rec.Cols {
-// 			rec.Vals = append(rec.Vals, *icol.Get(c))
-// 		}
-// 		// TODO: skip this if the index contains all the columns
-// 		ok, err := dbGet(sc.db, tdef, rec)
-// 		Assert(ok && err == nil, "error encoutered while dereferencing the current row by secondary index")
-// 	}
-// }
-
-// func (db *DB) Scan(table string, req *Scanner) error {
-// 	tdef := getTableDef(db, table)
-// 	if tdef == nil {
-// 		return fmt.Errorf("table not found: %s", table)
-// 	}
-// 	return dbScan(db, tdef, req)
-// }
-
-// func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
-// 	// sanity checks
-// 	switch {
-// 	case req.Cmp1 > 0 && req.Cmp2 < 0:
-// 	case req.Cmp2 > 0 && req.Cmp1 < 0:
-// 	default:
-// 		return fmt.Errorf("bad range")
-// 	}
-
-// 	//  select an index
-// 	indexNo, err := findIndex(tdef, req.Key1.Cols)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	index, prefix := tdef.Cols[:tdef.PKeys], tdef.Prefix
-// 	if indexNo >= 0 {
-// 		index, prefix = tdef.Indexes[indexNo], tdef.IndexPrefixes[indexNo]
-// 	}
-// 	req.db = db
-// 	req.tdef = tdef
-// 	req.indexNo = -1
-
-// 	// seek to the start key
-// 	keyStart := encodeKeyPartial(
-// 		nil, prefix, req.Key1.Vals, tdef, index, req.Cmp1)
-// 	req.keyEnd = encodeKeyPartial(
-// 		nil, prefix, req.Key2.Vals, tdef, index, req.Cmp2)
-// 	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
-// 	return nil
-// }
-
-// // within the range or not?
-// func (sc *Scanner) Valid() bool {
-// 	if !sc.iter.Valid() {
-// 		return false
-// 	}
-// 	key, _ := sc.iter.Deref()
-// 	return cmpOK(key, sc.Cmp2, sc.keyEnd)
-// }
-
-// // move the underlying B-tree iterator
-// func (sc *Scanner) Next() {
-// 	Assert(sc.Valid(), "scanner is not valid")
-// 	if sc.Cmp1 > 0 {
-// 		sc.iter.Next()
-// 	} else {
-// 		sc.iter.Prev()
-// 	}
-// }
-
-// // get a single row by the primary key
-// func dbGet(db *DB, tdef *TableDef, rec *Record) (bool, error) {
-// 	// just a shortcut for the scan operation
-// 	sc := Scanner{
-// 		Cmp1: CMP_GE,
-// 		Cmp2: CMP_LE,
-// 		Key1: *rec,
-// 		Key2: *rec,
-// 	}
-
-// 	if err := dbScan(db, tdef, &sc); err != nil {
-// 		return false, err
-// 	}
-
-// 	if sc.Valid() {
-// 		sc.Deref(rec)
-// 		return true, nil
-// 	} else {
-// 		return false, nil
-// 	}
-// }
 
 func checkIndexKeys(tdef *TableDef, index []string) ([]string, error) {
 	icols := map[string]bool{}
