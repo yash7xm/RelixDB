@@ -1,4 +1,4 @@
-package BTree
+package relixdb
 
 import "encoding/binary"
 

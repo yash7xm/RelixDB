@@ -1,4 +1,4 @@
-package BTree
+package relixdb
 
 type DBTX struct {
 	kv KVTX

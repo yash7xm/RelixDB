@@ -1,20 +1,18 @@
-package BTree
+package relixdb
 
 import (
-	"container/heap"
 	"fmt"
 )
 
 // KV transaction
 type KVTX struct {
-	KVReader
 	db *KV
-	free FreeList
-	page struct {
-		nappend int // number of pages to be appended
-		// newly allocated or deallocated pages keyed by the pointer.
-		// nil value denotes a deallocated page.
-		updates map[uint64][]byte
+	// for the roolback
+	tree struct {
+		root uint64
+	}
+	free struct {
+		head uint64
 	}
 }
 
@@ -114,14 +112,14 @@ func (kv *KV) BeginRead(tx *KVReader) {
 	tx.mmap.chunks = kv.mmap.chunks
 	tx.tree.root = kv.tree.root
 	tx.tree.get = tx.pageGetMapped
-	tx.version = kv.version
-	heap.Push(&kv.readers, tx)
+	// tx.version = kv.version
+	// heap.Push(&kv.readers, tx)
 	kv.mu.Unlock()
 }
 
 func (kv *KV) EndRead(tx *KVReader) {
 	kv.mu.Lock()
-	heap.Remove(&kv.readers, tx.index)
+	// heap.Remove(&kv.readers, tx.index)
 	kv.mu.Unlock()
 }
 
