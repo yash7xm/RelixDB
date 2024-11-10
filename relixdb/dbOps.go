@@ -30,6 +30,41 @@ type InsertReq struct {
 	Mode int
 }
 
+// add a record
+func (db *DB) Set(table string, rec Record, mode int) (bool, error) {
+	tdef := getTableDef(db, table)
+	if tdef == nil {
+		return false, fmt.Errorf("table not found: %s", table)
+	}
+	return dbUpdate(db, tdef, rec, mode)
+}
+
+func (db *DB) Insert(table string, rec Record) (bool, error) {
+	return db.Set(table, rec, MODE_INSERT_ONLY)
+}
+
+func (db *DB) Update(table string, rec Record) (bool, error) {
+	return db.Set(table, rec, MODE_UPDATE_ONLY)
+}
+
+func (db *DB) Upsert(table string, rec Record) (bool, error) {
+	return db.Set(table, rec, MODE_UPSERT)
+}
+
+func (db *KV) Update(req *InsertReq) (bool, error) {
+	req.tree = &db.tree
+	db.InsertEx(req)
+	return req.Added, nil
+}
+
+func (db *DB) Delete(table string, rec Record) (bool, error) {
+	tdef := getTableDef(db, table)
+	if tdef == nil {
+		return false, fmt.Errorf("table not found: %s", table)
+	}
+	return dbDelete(db, tdef, rec)
+}
+
 func (db *KV) InsertEx(req *InsertReq) {
 	// Retrieve the current value associated with the key, if any
 	_, found := db.Get(req.Key)
@@ -67,12 +102,6 @@ func (db *KV) InsertEx(req *InsertReq) {
 	}
 }
 
-func (db *KV) Update(req *InsertReq) (bool, error) {
-	req.tree = &db.tree
-	db.InsertEx(req)
-	return req.Added, nil
-}
-
 // add a row to the table
 func dbUpdate(db *DB, tdef *TableDef, rec Record, mode int) (bool, error) {
 	values, err := checkRecord(tdef, rec, len(tdef.Cols))
@@ -97,27 +126,6 @@ func dbUpdate(db *DB, tdef *TableDef, rec Record, mode int) (bool, error) {
 	return added, nil
 }
 
-// add a record
-func (db *DB) Set(table string, rec Record, mode int) (bool, error) {
-	tdef := getTableDef(db, table)
-	if tdef == nil {
-		return false, fmt.Errorf("table not found: %s", table)
-	}
-	return dbUpdate(db, tdef, rec, mode)
-}
-
-func (db *DB) Insert(table string, rec Record) (bool, error) {
-	return db.Set(table, rec, MODE_INSERT_ONLY)
-}
-
-func (db *DB) Update(table string, rec Record) (bool, error) {
-	return db.Set(table, rec, MODE_UPDATE_ONLY)
-}
-
-func (db *DB) Upsert(table string, rec Record) (bool, error) {
-	return db.Set(table, rec, MODE_UPSERT)
-}
-
 // delete a record by its primary key
 func dbDelete(db *DB, tdef *TableDef, rec Record) (bool, error) {
 	values, err := checkRecord(tdef, rec, tdef.PKeys)
@@ -135,14 +143,6 @@ func dbDelete(db *DB, tdef *TableDef, rec Record) (bool, error) {
 		indexOp(db, tdef, rec, INDEX_DEL)
 	}
 	return true, nil
-}
-
-func (db *DB) Delete(table string, rec Record) (bool, error) {
-	tdef := getTableDef(db, table)
-	if tdef == nil {
-		return false, fmt.Errorf("table not found: %s", table)
-	}
-	return dbDelete(db, tdef, rec)
 }
 
 // find the closest position that is less or equal to the input key
