@@ -23,7 +23,7 @@ func checkIndexKeys(tdef *TableDef, index []string) ([]string, error) {
 	return index, nil
 }
 
-func colIndex(tdef *TableDef, col string) int {
+func ColIndex(tdef *TableDef, col string) int {
 	for i, c := range tdef.Cols {
 		if c == col {
 			return i

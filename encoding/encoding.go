@@ -1,21 +1,22 @@
-package relational
+package encoding
 
 import (
 	"bytes"
 	"encoding/binary"
 
 	BTree "github.com/yash7xm/RelixDB/BTree"
+	Table "github.com/yash7xm/RelixDB/Relational"
 )
 
-func encodeValues(out []byte, vals []Value) []byte {
+func EncodeValues(out []byte, vals []Table.Value) []byte {
 	for _, v := range vals {
 		switch v.Type {
-		case TYPE_INT64:
+		case Table.TYPE_INT64:
 			var buf [8]byte
 			u := uint64(v.I64) + (1 << 63)
 			binary.BigEndian.PutUint64(buf[:], u)
 			out = append(out, buf[:]...)
-		case TYPE_BYTES:
+		case Table.TYPE_BYTES:
 			out = append(out, escapeString(v.Str)...)
 			out = append(out, 0) // null-terminated
 		default:
@@ -56,9 +57,9 @@ func escapeString(in []byte) []byte {
 	return out
 }
 
-func decodeValues(in []byte, out []Value) []Value {
+func DecodeValues(in []byte, out []Table.Value) []Table.Value {
 	str, _ := unescapeString(in[:])
-	out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
+	out = append(out, Table.Value{Type: Table.TYPE_BYTES, Str: []byte(str)})
 	return out
 }
 
@@ -87,21 +88,21 @@ func unescapeString(in []byte) (string, int) {
 }
 
 // for primary keys
-func encodeKey(out []byte, prefix uint32, vals []Value) []byte {
+func EncodeKey(out []byte, prefix uint32, vals []Table.Value) []byte {
 	var buf [4]byte
 	binary.BigEndian.PutUint32(buf[:], prefix)
 	out = append(out, buf[:]...)
-	out = encodeValues(out, vals)
+	out = EncodeValues(out, vals)
 	return out
 }
 
 // The range key can be a prefix of the index key,
 // we may have to encode missing columns to make the comparison work.
-func encodeKeyPartial(
-	out []byte, prefix uint32, values []Value,
-	tdef *TableDef, keys []string, cmp int,
+func EncodeKeyPartial(
+	out []byte, prefix uint32, values []Table.Value,
+	tdef *Table.TableDef, keys []string, cmp int,
 ) []byte {
-	out = encodeKey(out, prefix, values)
+	out = EncodeKey(out, prefix, values)
 	// Encode the missing columns as either minimum or maximum values,
 	// depending on the comparison operator.
 	// 1. The empty string is lower than all possible value encodings,
@@ -110,11 +111,11 @@ func encodeKeyPartial(
 	max := cmp == BTree.CMP_GT || cmp == BTree.CMP_LE
 loop:
 	for i := len(values); max && i < len(keys); i++ {
-		switch tdef.Types[colIndex(tdef, keys[i])] {
-		case TYPE_BYTES:
+		switch tdef.Types[Table.ColIndex(tdef, keys[i])] {
+		case Table.TYPE_BYTES:
 			out = append(out, 0xff)
 			break loop // stops here since no string encoding starts with 0xff
-		case TYPE_INT64:
+		case Table.TYPE_INT64:
 			out = append(out, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)
 		default:
 			panic("what?")
