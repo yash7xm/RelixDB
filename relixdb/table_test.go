@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-func TestInitTestDB(t *testing.T) {
+func initDB(t *testing.T) *DB {
 	// Initialize a new DB instance
 	db := &DB{
-		Path:   "testdb",           // or use any path for testing
-		kv:     KV{Path: "testdb"}, // Initialize the underlying KV store (assuming you have a NewKV() constructor)
+		Path:   "testdb",
+		kv:     KV{Path: "testdb"},
 		tables: make(map[string]*TableDef),
 	}
 
@@ -33,6 +33,12 @@ func TestInitTestDB(t *testing.T) {
 		t.Fatalf("failed to create @meta table: %v", err)
 	}
 
+	return db
+}
+
+func TestInitTestDB(t *testing.T) {
+	db := initDB(t)
+
 	// // // Initialize a sample table for testing
 	sampleTable := &TableDef{
 		Name:  "test_table",                     // Name of the test table
@@ -42,7 +48,7 @@ func TestInitTestDB(t *testing.T) {
 	}
 
 	// Create the sample table in the test DB
-	err = db.TableNew(sampleTable)
+	err := db.TableNew(sampleTable)
 	if err != nil {
 		t.Fatalf("failed to create sample table: %v", err)
 	}
@@ -57,3 +63,4 @@ func TestInitTestDB(t *testing.T) {
 		t.Fatalf("failed to insert test data: %v", err)
 	}
 }
+
