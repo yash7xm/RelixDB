@@ -64,3 +64,58 @@ func TestInitTestDB(t *testing.T) {
 	}
 }
 
+func TestSetAndGet(t *testing.T) {
+	db := initDB(t)
+
+	table1 := &TableDef{
+		Name:  "table1",
+		Types: []uint32{TYPE_INT64, TYPE_BYTES},
+		Cols:  []string{"id", "name"},
+		PKeys: 1,
+	}
+
+	err := db.TableNew(table1)
+	if err != nil {
+		t.Fatalf("Failed to create table1: %v", err)
+	}
+
+	record1 := (&Record{}).
+		AddInt64("id", 1).
+		AddStr("name", []byte("Alice"))
+
+	record2 := (&Record{}).
+		AddInt64("id", 2).
+		AddStr("name", []byte("Bob"))
+
+	_, err = db.Insert("table1", *record1)
+	if err != nil {
+		t.Fatalf("failed to insert test data: %v", err)
+	}
+
+	_, err = db.Insert("table1", *record2)
+	if err != nil {
+		t.Fatalf("failed to insert test data: %v", err)
+	}
+
+	record := (&Record{}).AddInt64("id", 1)
+	_, err = db.Get("table1", record)
+	if err != nil {
+		t.Fatalf("failed to get test data: %v", err)
+	}
+
+	if string(record.Get("name").Str) != string(record1.Get("name").Str) {
+		t.Fatalf("failed to get the correct name")
+	}
+	fmt.Printf("Id: %v, Name: %v\n", (record.Get("id").I64), string(record.Get("name").Str))
+
+	record = (&Record{}).AddInt64("id", 2)
+	_, err = db.Get("table1", record)
+	if err != nil {
+		t.Fatalf("failed to get test data: %v", err)
+	}
+
+	if string(record.Get("name").Str) != string(record2.Get("name").Str) {
+		t.Fatalf("failed to get the correct name")
+	}
+	fmt.Printf("Id: %v, Name: %v\n", (record.Get("id").I64), string(record.Get("name").Str))
+}
