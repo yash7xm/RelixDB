@@ -87,7 +87,7 @@ func (tx *KVTX) Seek(key []byte, cmp int) *BIter {
 }
 
 func (tx *KVTX) Update(req *InsertReq) bool {
-	tx.db.InsertEx(req)
+	tx.db.tree.InsertEx(req)
 	return req.Added
 }
 

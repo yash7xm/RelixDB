@@ -30,9 +30,14 @@ func (sc *Scanner) Deref(rec *Record) {
 
 	if sc.indexNo < 0 {
 		// primary key decode the KV pair
-		rec.Vals = make([]Value, 2)
-		rec.Vals[0] = Value{Type: TYPE_BYTES, Str: key}
-		rec.Vals[1] = Value{Type: TYPE_BYTES, Str: val}
+		rec.Vals = make([]Value, len(tdef.Cols))
+		for i := 0; i < len(tdef.Cols); i++ {
+			rec.Vals[i] = Value{Type: tdef.Types[i]}
+		}
+		decodeValues(val, rec.Vals[tdef.PKeys:])
+		for i := tdef.PKeys; i < len(tdef.Cols); i++ {
+			fmt.Printf("Val: %v\n", string(rec.Vals[i].Str))
+		}
 	} else {
 		// secondary index
 		// the "value" part of the KV store is not used by indexes

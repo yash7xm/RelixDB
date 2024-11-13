@@ -54,34 +54,90 @@ func escapeString(in []byte) []byte {
 	return out
 }
 
+// Decode the encoded values back to their original form
 func decodeValues(in []byte, out []Value) []Value {
-	str, _ := unescapeString(in[:])
-	out = append(out, Value{Type: TYPE_BYTES, Str: []byte(str)})
+	pos := 0
+	for pos < len(in) {
+		// We need at least one byte to determine the type
+		if len(out) == 0 {
+			break
+		}
+
+		currentValue := &out[0]
+		out = out[1:]
+
+		switch currentValue.Type {
+		case TYPE_INT64:
+			// For int64, we read exactly 8 bytes
+			if pos+8 > len(in) {
+				panic("incomplete int64 value")
+			}
+			// Read the uint64 and convert back to int64
+			u := binary.BigEndian.Uint64(in[pos : pos+8])
+			currentValue.I64 = int64(u - (1 << 63)) // Reverse the sign bit flip
+			pos += 8
+
+		case TYPE_BYTES:
+			// Find the null terminator and unescape the string
+			start := pos
+			for pos < len(in) && in[pos] != 0 {
+				if in[pos] == 0x01 {
+					pos++ // Skip escape byte
+					if pos >= len(in) {
+						panic("incomplete escape sequence")
+					}
+				}
+				pos++
+			}
+			if pos >= len(in) {
+				panic("unterminated string")
+			}
+
+			// Unescape the string
+			currentValue.Str = unescapeString(in[start:pos])
+			pos++ // Skip null terminator
+
+		default:
+			panic("unknown type")
+		}
+	}
 	return out
 }
 
-// unescapeString reverses the escapeString process
-func unescapeString(in []byte) (string, int) {
-	out := make([]byte, 0, len(in))
-	i := 0
-	for i < len(in) {
+// Unescape the string by converting \x01\x01 back to \x00 and \x01\x02 back to \x01
+func unescapeString(in []byte) []byte {
+	// Count how many escape sequences we have to allocate the right size
+	escapeCount := 0
+	for i := 0; i < len(in); i++ {
 		if in[i] == 0x01 {
-			if in[i+1] == 0x01 {
-				out = append(out, 0) // "\x01\x01" -> "\x00"
-			} else if in[i+1] == 0x02 {
-				out = append(out, 0x01) // "\x01\x02" -> "\x01"
-			} else {
-				panic("invalid escape sequence")
-			}
-			i += 2 // Move past the escape sequence
-		} else if in[i] == 0 {
-			break // Null-terminator found, end of string
-		} else {
-			out = append(out, in[i])
-			i++
+			escapeCount++
+			i++ // Skip the next byte as it's part of the escape sequence
 		}
 	}
-	return string(out), i
+
+	// If no escapes, return the original
+	if escapeCount == 0 {
+		return in
+	}
+
+	// Create the output buffer with the correct size
+	out := make([]byte, len(in)-escapeCount)
+	pos := 0
+
+	for i := 0; i < len(in); i++ {
+		if in[i] == 0x01 {
+			i++ // Move to the next byte
+			if i >= len(in) {
+				panic("incomplete escape sequence")
+			}
+			out[pos] = in[i] - 1 // Convert back from escaped value
+		} else {
+			out[pos] = in[i]
+		}
+		pos++
+	}
+
+	return out
 }
 
 // for primary keys

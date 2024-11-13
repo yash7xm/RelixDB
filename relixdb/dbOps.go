@@ -40,7 +40,7 @@ func (db *DB) Upsert(table string, rec Record) (bool, error) {
 
 func (db *KV) Update(req *InsertReq) (bool, error) {
 	req.tree = &db.tree
-	db.InsertEx(req)
+	db.tree.InsertEx(req)
 	return req.Added, nil
 }
 
@@ -52,26 +52,26 @@ func (db *DB) Delete(table string, rec Record) (bool, error) {
 	return dbDelete(db, tdef, rec)
 }
 
-func (db *KV) InsertEx(req *InsertReq) {
+func (tree *BTree) InsertEx(req *InsertReq) {
 	// Retrieve the current value associated with the key, if any
-	_, found := db.Get(req.Key)
+	_, found := tree.Get(req.Key)
 
 	switch req.Mode {
 	case MODE_UPSERT:
 		if found {
 			// Replace the existing value
-			db.Set(req.Key, req.Val)
-			// tree.Set(req.Key, req.Val)
+			tree.Insert(req.Key, req.Val)
+			// tree.Set(req.Key, req.Val)return db.Set(table, rec, MODE_INSERT_ONLY)
 			req.Added = false // no new key was added
 		} else {
 			// Insert the new key-value pair
-			db.Set(req.Key, req.Val)
+			tree.Insert(req.Key, req.Val)
 			req.Added = true // a new key was added
 		}
 	case MODE_UPDATE_ONLY:
 		if found {
 			// Update the existing value
-			db.Set(req.Key, req.Val)
+			tree.Insert(req.Key, req.Val)
 			req.Added = false
 		} else {
 			req.Added = false // no key was added
@@ -79,7 +79,7 @@ func (db *KV) InsertEx(req *InsertReq) {
 	case MODE_INSERT_ONLY:
 		if !found {
 			// Insert the new key-value pair
-			db.Set(req.Key, req.Val)
+			tree.Insert(req.Key, req.Val)
 			req.Added = true
 		} else {
 			req.Added = false // no key was added

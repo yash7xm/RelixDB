@@ -1,24 +1,30 @@
 package relixdb
 
+import "fmt"
 
 type BIter struct {
 	tree *BTree
-	path []BNode // from root to leaf
-	pos  []uint16      // indexes into nodes
+	path []BNode  // from root to leaf
+	pos  []uint16 // indexes into nodes
 }
 
 // get the current KV pair
 func (iter *BIter) Deref() ([]byte, []byte) {
+	// Ensure the iterator is valid before dereferencing
 	if !iter.Valid() {
-		return []byte(""), []byte("")
+		return nil, nil // or handle the error in some way
 	}
-	node := iter.path[len(iter.path)-1]
-	key := node.getKey(iter.pos[len(iter.pos)-1])
-	val := node.getVal(iter.pos[len(iter.pos)-1])
-	v := []Value{}
-	v = decodeValues(val, v)
 
-	return key, v[0].Str
+	// Get the current node and the position within it
+	node := iter.path[len(iter.path)-1] // The leaf node
+	pos := iter.pos[len(iter.pos)-1]    // Position within the leaf node
+
+	key := node.getKey(pos)
+	value := node.getVal(pos)
+
+	fmt.Printf("key: %v, val: %v\n", string(key), string(value))
+
+	return key, value
 }
 
 // precondition of the Deref()
