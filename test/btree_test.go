@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	db "github.com/yash7xm/RelixDB/relixdb"
+	db "github.com/yash7xm/RelixDB/app"
 )
 
 func TestBTreeInsertLookup(t *testing.T) {
