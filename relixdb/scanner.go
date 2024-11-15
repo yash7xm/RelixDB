@@ -24,20 +24,34 @@ func (sc *Scanner) Deref(rec *Record) {
 	Assert(sc.Valid(), "scanner is not valid")
 
 	tdef := sc.tdef
-	rec.Cols = tdef.Cols
-	rec.Vals = rec.Vals[:0]
 	key, val := sc.iter.Deref()
+
+	// Reset the record's state
+	rec.Cols = make([]string, 0, len(tdef.Cols))
+	rec.Vals = make([]Value, 0, len(tdef.Cols))
 
 	if sc.indexNo < 0 {
 		// primary key decode the KV pair
-		rec.Vals = make([]Value, len(tdef.Cols))
-		for i := 0; i < len(tdef.Cols); i++ {
-			rec.Vals[i] = Value{Type: tdef.Types[i]}
+		// Primary key scan
+		// First, decode the primary key portion from the key bytes
+		pkValues := make([]Value, tdef.PKeys)
+		for i := 0; i < tdef.PKeys; i++ {
+			pkValues[i].Type = tdef.Types[i]
 		}
-		decodeValues(val, rec.Vals[tdef.PKeys:])
-		for i := tdef.PKeys; i < len(tdef.Cols); i++ {
-			fmt.Printf("Val: %v\n", string(rec.Vals[i].Str))
+		// Skip the 4-byte prefix when decoding key
+		decodeValues(key[4:], pkValues)
+
+		// Now decode the remaining columns from the value bytes
+		remaining := make([]Value, len(tdef.Cols)-tdef.PKeys)
+		for i := 0; i < len(remaining); i++ {
+			remaining[i].Type = tdef.Types[i+tdef.PKeys]
 		}
+		decodeValues(val, remaining)
+
+		// Combine everything into the record
+		rec.Cols = append(rec.Cols, tdef.Cols...)
+		rec.Vals = append(rec.Vals, pkValues...)
+		rec.Vals = append(rec.Vals, remaining...)
 	} else {
 		// secondary index
 		// the "value" part of the KV store is not used by indexes
@@ -98,6 +112,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 	req.keyEnd = encodeKeyPartial(
 		nil, prefix, req.Key2.Vals, tdef, index, req.Cmp2)
 	req.iter = db.kv.tree.Seek(keyStart, req.Cmp1)
+
 	return nil
 }
 
