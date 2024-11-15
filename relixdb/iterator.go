@@ -22,7 +22,7 @@ func (iter *BIter) Deref() ([]byte, []byte) {
 	key := node.getKey(pos)
 	value := node.getVal(pos)
 
-	fmt.Printf("key: %v, val: %v\n", string(key), string(value))
+	fmt.Printf("BTreeIterKey: %v, BTreeIterVal: %v\n", string(key), string(value))
 
 	return key, value
 }
