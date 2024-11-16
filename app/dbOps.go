@@ -54,7 +54,6 @@ func (db *DB) Delete(table string, rec Record) (bool, error) {
 
 func (db *KV) InsertEx(req *InsertReq) {
 	// Retrieve the current value associated with the key, if any
-	fmt.Printf("key in insertEx: %v\n", string(req.Key))
 	_, found := db.Get(req.Key)
 
 	switch req.Mode {

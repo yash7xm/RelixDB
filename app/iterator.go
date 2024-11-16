@@ -1,7 +1,5 @@
 package relixdb
 
-import "fmt"
-
 type BIter struct {
 	tree *BTree
 	path []BNode  // from root to leaf
@@ -21,8 +19,6 @@ func (iter *BIter) Deref() ([]byte, []byte) {
 
 	key := node.getKey(pos)
 	value := node.getVal(pos)
-
-	fmt.Printf("BTreeIterKey: %v, BTreeIterVal: %v\n", string(key), string(value))
 
 	return key, value
 }
