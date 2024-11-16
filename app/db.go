@@ -89,7 +89,7 @@ func checkRecord(tdef *TableDef, rec Record, n int) ([]Value, error) {
 	}
 
 	return values, nil
-}
+}	
 
 // get a single row by the primary key
 func (db *DB) Get(table string, rec *Record) (bool, error) {
