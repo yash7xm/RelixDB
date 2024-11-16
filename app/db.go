@@ -13,6 +13,25 @@ type DB struct {
 	tables map[string]*TableDef // cached table defination
 }
 
+func (db *DB) NewDB(path string) *DB {
+	return &DB{
+		Path:   path,
+		kv:     KV{Path: path},
+		tables: make(map[string]*TableDef),
+	}
+}
+
+func (db *DB) Open() error {
+	if err := db.kv.Open(); err != nil {
+		return fmt.Errorf("failed to open db: %v", err)
+	}
+	return nil
+}
+
+func (db *DB) Close() {
+	db.kv.Close()
+}
+
 // table defination
 type TableDef struct {
 	// user defined
