@@ -7,8 +7,6 @@ import (
 	Table "github.com/yash7xm/RelixDB/app"
 )
 
-const TEST_DB_PATH = "../test.db"
-
 func TestSampleTestData(t *testing.T) {
 	// Initialize the DB correctly
 	db := &Table.DB{}
@@ -397,7 +395,7 @@ func TestDataTypes(t *testing.T) {
 			if err == nil {
 				// Verify the inserted data
 				queryRecord := (&Table.Record{}).AddInt64("id", tt.record.Get("id").I64)
-				found, err := db.Get("types_test1", queryRecord)
+				found, err := db.Get("types_test", queryRecord)
 				if err != nil {
 					t.Errorf("Get() error = %v", err)
 				}

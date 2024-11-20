@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	app "github.com/yash7xm/RelixDB/app" // Importing the package directly
+	app "github.com/yash7xm/RelixDB/app"
 )
 
 func main() {
