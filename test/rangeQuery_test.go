@@ -193,10 +193,10 @@ func TestScanner(t *testing.T) {
 	}
 
 	scanner := &Table.Scanner{
-		Cmp1: Table.CMP_GT,
-		Cmp2: Table.CMP_LT,
+		Cmp1: Table.CMP_GE,
+		Cmp2: Table.CMP_LE,
 		Key1: *(&Table.Record{}).AddInt64("id", 1),
-		Key2: *(&Table.Record{}).AddInt64("id", 4),
+		Key2: *(&Table.Record{}).AddInt64("id", 5),
 	}
 
 	err = db.Scan("users", scanner)
@@ -209,6 +209,7 @@ func TestScanner(t *testing.T) {
 		var rec Table.Record
 		scanner.Deref(&rec)
 		resultIDs = append(resultIDs, rec.Get("id").I64)
+		fmt.Println(rec.Get("id").I64)
 		scanner.Next()
 	}
 

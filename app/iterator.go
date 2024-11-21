@@ -1,21 +1,21 @@
 package relixdb
 
 type BIter struct {
-	tree *BTree
-	path []BNode  // from root to leaf
-	pos  []uint16 // indexes into nodes
+	tree   *BTree
+	path   []BNode  // From root to leaf
+	pos    []uint16 // Indexes into nodes
+	maxKey []byte   // Max key in the BTree
+	minKey []byte   // Min key in the BTree
 }
 
 // get the current KV pair
 func (iter *BIter) Deref() ([]byte, []byte) {
-	// Ensure the iterator is valid before dereferencing
 	if !iter.Valid() {
-		return nil, nil // or handle the error in some way
+		return nil, nil // Handle invalid state gracefully
 	}
 
-	// Get the current node and the position within it
-	node := iter.path[len(iter.path)-1] // The leaf node
-	pos := iter.pos[len(iter.pos)-1]    // Position within the leaf node
+	node := iter.path[len(iter.path)-1]
+	pos := iter.pos[len(iter.pos)-1]
 
 	key := node.getKey(pos)
 	value := node.getVal(pos)
@@ -23,55 +23,107 @@ func (iter *BIter) Deref() ([]byte, []byte) {
 	return key, value
 }
 
-// precondition of the Deref()
+// Validate the iterator
 func (iter *BIter) Valid() bool {
-	return len(iter.path) != 0
+	if iter == nil || iter.tree == nil {
+		return false
+	}
+
+	if len(iter.path) == 0 || len(iter.pos) == 0 || len(iter.path) != len(iter.pos) {
+		return false
+	}
+
+	for i := 0; i < len(iter.path); i++ {
+		node := iter.path[i]
+		pos := iter.pos[i]
+
+		if node.nkeys() == 0 || pos >= node.nkeys() {
+			return false
+		}
+
+		if i < len(iter.path)-1 && node.getPtr(pos) == 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
-// moving backward and forward
+// Move forward
 func (iter *BIter) Next() {
-	iterNext(iter, len(iter.path)-1)
+	if !iter.Valid() {
+		return
+	}
+
+	if !iterNext(iter, len(iter.path)-1) {
+		// If no more keys, move to maxKey
+		iter.path = nil
+		iter.pos = nil
+	}
 }
 
+// Move backward
 func (iter *BIter) Prev() {
-	iterPrev(iter, len(iter.path)-1)
+	if !iter.Valid() {
+		return
+	}
+
+	if !iterPrev(iter, len(iter.path)-1) {
+		// If no more keys, move to minKey
+		iter.path = nil
+		iter.pos = nil
+	}
 }
 
-func iterNext(iter *BIter, level int) {
-	// Check if we can move right within the current node at this level
+func iterNext(iter *BIter, level int) bool {
 	node := iter.path[level]
 	if iter.pos[level] < node.nkeys()-1 {
-		iter.pos[level]++ // Move right within this node
+		iter.pos[level]++
+		return true
 	} else if level > 0 {
-		// If we are at the last key, move up to the parent and then continue
-		iterNext(iter, level-1) // Move up to parent node
-	} else {
-		return // No more keys (we are done)
+		if iterNext(iter, level-1) {
+			node := iter.path[level]
+			kid := iter.tree.get(node.getPtr(iter.pos[level]))
+			iter.path[level+1] = kid
+			iter.pos[level+1] = 0
+			return true
+		}
 	}
-
-	// If there are more levels, move to the leftmost child of the next key
-	if level+1 < len(iter.pos) {
-		node := iter.path[level]
-		kid := iter.tree.get(node.getPtr(iter.pos[level])) // Get the child pointer
-		iter.path[level+1] = kid                           // Move to the child node
-		iter.pos[level+1] = 0                              // Set position at the first key
-	}
+	return false // No more keys
 }
 
-func iterPrev(iter *BIter, level int) {
+func iterPrev(iter *BIter, level int) bool {
+	// node := iter.path[level]
 	if iter.pos[level] > 0 {
-		iter.pos[level]-- // move within this node
+		iter.pos[level]--
+		return true
 	} else if level > 0 {
-		iterPrev(iter, level-1) // move to a sibling node
-	} else {
-		return // dummy key
+		if iterPrev(iter, level-1) {
+			node := iter.path[level]
+			kid := iter.tree.get(node.getPtr(iter.pos[level]))
+			iter.path[level+1] = kid
+			iter.pos[level+1] = kid.nkeys() - 1
+			return true
+		}
 	}
+	return false // No more keys
+}
 
-	if level+1 < len(iter.pos) {
-		// update the kid node
-		node := iter.path[level]
-		kid := iter.tree.get(node.getPtr(iter.pos[level]))
-		iter.path[level+1] = kid
-		iter.pos[level+1] = kid.nkeys() - 1
+// Set max and min keys explicitly for boundary cases
+func (iter *BIter) SetBounds(minKey, maxKey []byte) {
+	iter.minKey = minKey
+	iter.maxKey = maxKey
+}
+
+// Deref when the iterator is out of bounds
+func (iter *BIter) DerefOutOfBounds() ([]byte, []byte) {
+	if iter.path == nil || iter.pos == nil {
+		if iter.minKey != nil && iter.maxKey != nil {
+			if len(iter.path) == 0 { // Before the first key
+				return iter.minKey, nil
+			}
+			return iter.maxKey, nil
+		}
 	}
+	return nil, nil
 }
