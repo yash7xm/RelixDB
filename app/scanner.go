@@ -104,7 +104,7 @@ func dbScan(db *DB, tdef *TableDef, req *Scanner) error {
 	}
 	req.db = db
 	req.tdef = tdef
-	req.indexNo = -1
+	req.indexNo = indexNo
 
 	// seek to the start key
 	keyStart := encodeKeyPartial(

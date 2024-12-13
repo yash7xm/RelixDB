@@ -7,7 +7,7 @@ func checkIndexKeys(tdef *TableDef, index []string) ([]string, error) {
 	for _, c := range index {
 		// check the index columns
 		// omitted...
-		icols[c] = true	
+		icols[c] = true
 	}
 	// add the primary key to the index
 	for _, c := range tdef.Cols[:tdef.PKeys] {

@@ -63,26 +63,32 @@ func (db *KV) InsertEx(req *InsertReq) {
 			db.Set(req.Key, req.Val)
 			// tree.Set(req.Key, req.Val)return db.Set(table, rec, MODE_INSERT_ONLY)
 			req.Added = false // no new key was added
+			req.Updated = true
 		} else {
 			// Insert the new key-value pair
 			db.Set(req.Key, req.Val)
 			req.Added = true // a new key was added
+			req.Updated = true
 		}
 	case MODE_UPDATE_ONLY:
 		if found {
 			// Update the existing value
 			db.Set(req.Key, req.Val)
 			req.Added = false
+			req.Updated = true
 		} else {
 			req.Added = false // no key was added
+			req.Updated = true
 		}
 	case MODE_INSERT_ONLY:
 		if !found {
 			// Insert the new key-value pair
 			db.Set(req.Key, req.Val)
 			req.Added = true
+			req.Updated = true
 		} else {
 			req.Added = false // no key was added
+			req.Updated = true
 		}
 	default:
 		panic("unsupported mode")

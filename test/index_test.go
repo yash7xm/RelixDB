@@ -7,6 +7,56 @@ import (
 	Table "github.com/yash7xm/RelixDB/app"
 )
 
+func TestInsertSecondaryIndex(t *testing.T) {
+	// Initialize DB with proper structure
+	db := &Table.DB{}
+	db = db.NewDB(TEST_DB_PATH)
+
+	// Open database with proper error handling
+	if err := db.Open(); err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	// Define test table schema
+	table := &Table.TableDef{
+		Name:    "table",
+		Types:   []uint32{Table.TYPE_BYTES, Table.TYPE_BYTES, Table.TYPE_BYTES},
+		Cols:    []string{"id", "name", "lastname"},
+		PKeys:   1,
+		Indexes: [][]string{{"name"}},
+	}
+
+	// Create the test table
+	err := db.TableNew(table)
+	if err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
+	// Test data setup
+	testCases := []struct {
+		id       string
+		name     string
+		lastname string
+	}{
+		{"a", "alice", "panga"},
+		{"b", "bob", "changa"},
+	}
+
+	// Insert test records
+	for _, tc := range testCases {
+		record := (&Table.Record{}).
+			AddStr("id", []byte(tc.id)).
+			AddStr("name", []byte(tc.name)).
+			AddStr("lastname", []byte(tc.lastname))
+
+		_, err := db.Insert("table", *record)
+		if err != nil {
+			t.Fatalf("Failed to insert record with id %v: %v", string(tc.id), err)
+		}
+	}
+}
+
 func TestSetAndScanIndex(t *testing.T) {
 	// Initialize DB with proper structure
 	db := &Table.DB{}
@@ -63,7 +113,7 @@ func TestSetAndScanIndex(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Retrieving record with ID %d", tc.id), func(t *testing.T) {
 			// Query the record
-			queryRecord := (&Table.Record{}).AddStr("name", []byte(tc.name))
+			queryRecord := (&Table.Record{}).AddInt64("age", (tc.age))
 			found, err := db.Get("table", queryRecord)
 			if err != nil {
 				t.Fatalf("Failed to get record with id %d: %v", tc.id, err)
