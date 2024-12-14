@@ -51,7 +51,7 @@ func roolbackTX(tx *KVTX) {
 	kv.free.head = tx.free.head
 	kv.page.nfree = 0
 	kv.page.nappend = 0
-	kv.page.updates = map[uint64][]byte{}
+	kv.page.updates = make(map[uint64][]byte)
 }
 
 // end a transaction: roolback

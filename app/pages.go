@@ -12,16 +12,16 @@ func (db *KV) pageGet(ptr uint64) BNode {
 }
 
 func pageGetMapped(db *KV, ptr uint64) BNode {
-	start := uint64(0)
-	for _, chunk := range db.mmap.chunks {
-		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
-		if ptr < end {
-			offset := BTREE_PAGE_SIZE * (ptr - start)
-			return BNode{chunk[offset : offset+BTREE_PAGE_SIZE]}
-		}
-		start = end
-	}
-	panic("bad ptr")
+    start := uint64(0)
+    for _, chunk := range db.mmap.chunks {
+        end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
+        if ptr < end {
+            offset := BTREE_PAGE_SIZE * (ptr - start)
+            return BNode{chunk[offset : offset+BTREE_PAGE_SIZE]}
+        }
+        start = end
+    }
+    panic(fmt.Sprintf("invalid pointer: %d", ptr))
 }
 
 // callback for BTree, allocate a new page.

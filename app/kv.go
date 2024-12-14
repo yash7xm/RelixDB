@@ -36,29 +36,33 @@ type KV struct {
 // implements heap.Interface
 type ReaderList []*KVReader
 
-// Len implements heap.Interface.
+// Len returns the number of readers.
 func (r *ReaderList) Len() int {
-	panic("unimplemented")
+    return len(*r)
 }
 
-// Less implements heap.Interface.
-func (r *ReaderList) Less(i int, j int) bool {
-	panic("unimplemented")
+// Less compares reader versions for heap ordering.
+func (r *ReaderList) Less(i, j int) bool {
+    return (*r)[i].version < (*r)[j].version
 }
 
-// Pop implements heap.Interface.
-func (r *ReaderList) Pop() any {
-	panic("unimplemented")
+// Swap swaps two elements in the reader list.
+func (r *ReaderList) Swap(i, j int) {
+    (*r)[i], (*r)[j] = (*r)[j], (*r)[i]
 }
 
-// Push implements heap.Interface.
+// Push adds a new reader to the heap.
 func (r *ReaderList) Push(x any) {
-	panic("unimplemented")
+    *r = append(*r, x.(*KVReader))
 }
 
-// Swap implements heap.Interface.
-func (r *ReaderList) Swap(i int, j int) {
-	panic("unimplemented")
+// Pop removes the minimum reader (lowest version).
+func (r *ReaderList) Pop() any {
+    old := *r
+    n := len(old)
+    x := old[n-1]
+    *r = old[0 : n-1]
+    return x
 }
 
 func (db *KV) Open() (err error) {
