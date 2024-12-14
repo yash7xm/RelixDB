@@ -155,3 +155,16 @@ func (tx *KVReader) pageGetMapped(ptr uint64) BNode {
 
 // func (tx *KVReader) Get(key []byte) ([]byte, bool)
 // func (tx *KVReader) Seek(key []byte, cmp int) *BIter
+
+// btree utility functions
+func (tx *KVTX) pageGet(ptr uint64) BNode {
+	return tx.db.pageGet(ptr)
+}
+
+func (tx *KVTX) pageNew(node BNode) uint64 {
+	return tx.db.pageNew(node)
+}
+
+func (tx *KVTX) pageDel(ptr uint64) {
+	tx.db.pageDel(ptr)
+}
