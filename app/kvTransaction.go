@@ -1,6 +1,7 @@
 package relixdb
 
 import (
+	"bytes"
 	"container/heap"
 	"fmt"
 )
@@ -153,8 +154,23 @@ func (tx *KVReader) pageGetMapped(ptr uint64) BNode {
 	return BNode{}
 }
 
-// func (tx *KVReader) Get(key []byte) ([]byte, bool)
-// func (tx *KVReader) Seek(key []byte, cmp int) *BIter
+// Get retrieves the value associated with the key from the read-only transaction.
+func (tx *KVReader) Get(key []byte) ([]byte, bool) {
+	// We use the `Seek` method for KVReader which returns the iterator to find the key
+	iter := tx.Seek(key, CMP_LE)
+	if iter.Valid() {
+		currKey, currVal := iter.Deref()
+		if bytes.Equal(currKey, key) {
+			return currVal, true
+		}
+	}
+	return nil, false
+}
+
+// Seek returns an iterator to the closest position based on the comparison.
+func (tx *KVReader) Seek(key []byte, cmp int) *BIter {
+	return tx.tree.Seek(key, cmp)
+}
 
 // btree utility functions
 func (tx *KVTX) pageGet(ptr uint64) BNode {
