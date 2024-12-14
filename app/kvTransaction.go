@@ -1,26 +1,47 @@
 package relixdb
 
 import (
+	"container/heap"
 	"fmt"
 )
 
 // KV transaction
 type KVTX struct {
-	db *KV
-	// for the roolback
-	tree struct {
-		root uint64
-	}
-	free struct {
-		head uint64
+	KVReader
+	db   *KV
+	free FreeList
+	page struct {
+		nappend int // number of pages to be appended
+		// newly allocated or deallocated pages keyed by the pointer.
+		// nil value denotes a deallocated page.
+		updates map[uint64][]byte
 	}
 }
 
 // begin a transaction
 func (kv *KV) Begin(tx *KVTX) {
 	tx.db = kv
+	tx.page.updates = map[uint64][]byte{}
+	tx.mmap.chunks = kv.mmap.chunks
+	kv.writer.Lock()
+	tx.version = kv.version
+	// btree
 	tx.tree.root = kv.tree.root
-	tx.free.head = kv.free.head
+	tx.tree.get = tx.pageGet
+	tx.tree.new = tx.pageNew
+	tx.tree.del = tx.pageDel
+	// freelist
+	tx.free.FreeListData = kv.free
+	tx.free.version = kv.version
+	tx.free.get = tx.pageGet
+	tx.free.new = tx.pageAppend
+	tx.free.use = tx.pageUse
+	tx.free.minReader = kv.version
+	kv.mu.Lock()
+	if len(kv.readers) > 0 {
+		tx.free.minReader = kv.readers[0].version
+	}
+	kv.mu.Unlock()
 }
 
 // roolback the tree and other in-memory data structures.
@@ -35,11 +56,12 @@ func roolbackTX(tx *KVTX) {
 
 // end a transaction: roolback
 func (kv *KV) Abort(tx *KVTX) {
-	roolbackTX(tx)
+	kv.writer.Unlock()
 }
 
 // end a transaction: commit updates
 func (kv *KV) Commit(tx *KVTX) error {
+	defer kv.writer.Unlock()
 	if kv.tree.root == tx.tree.root {
 		return nil // no updates?
 	}
@@ -58,10 +80,13 @@ func (kv *KV) Commit(tx *KVTX) error {
 	}
 
 	// the transaction is visible at this point.
-	kv.page.flushed += uint64(kv.page.nappend)
-	kv.page.nfree = 0
-	kv.page.nappend = 0
-	kv.page.updates = map[uint64][]byte{}
+	// save the new version of in-memory data structures.
+	kv.page.flushed += uint64(tx.page.nappend)
+	kv.free = tx.free.FreeListData
+	kv.mu.Lock()
+	kv.tree.root = tx.tree.root
+	kv.version++
+	kv.mu.Unlock()
 
 	// phase 2: update the master page to point to the new tree.
 	// NOTE: Cannot rollback the tree to the old version if phase 2 fails.
@@ -112,14 +137,14 @@ func (kv *KV) BeginRead(tx *KVReader) {
 	tx.mmap.chunks = kv.mmap.chunks
 	tx.tree.root = kv.tree.root
 	tx.tree.get = tx.pageGetMapped
-	// tx.version = kv.version
-	// heap.Push(&kv.readers, tx)
+	tx.version = kv.version
+	heap.Push(&kv.readers, tx)
 	kv.mu.Unlock()
 }
 
 func (kv *KV) EndRead(tx *KVReader) {
 	kv.mu.Lock()
-	// heap.Remove(&kv.readers, tx.index)
+	heap.Remove(&kv.readers, tx.index)
 	kv.mu.Unlock()
 }
 

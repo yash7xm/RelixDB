@@ -28,6 +28,37 @@ type KV struct {
 	free   FreeList
 	mu     sync.Mutex
 	writer sync.Mutex
+	// version number and reader list
+	version uint64
+	readers ReaderList // heap, for tracking the minimum reader version
+}
+
+// implements heap.Interface
+type ReaderList []*KVReader
+
+// Len implements heap.Interface.
+func (r *ReaderList) Len() int {
+	panic("unimplemented")
+}
+
+// Less implements heap.Interface.
+func (r *ReaderList) Less(i int, j int) bool {
+	panic("unimplemented")
+}
+
+// Pop implements heap.Interface.
+func (r *ReaderList) Pop() any {
+	panic("unimplemented")
+}
+
+// Push implements heap.Interface.
+func (r *ReaderList) Push(x any) {
+	panic("unimplemented")
+}
+
+// Swap implements heap.Interface.
+func (r *ReaderList) Swap(i int, j int) {
+	panic("unimplemented")
 }
 
 func (db *KV) Open() (err error) {
