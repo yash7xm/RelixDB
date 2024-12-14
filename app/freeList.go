@@ -4,10 +4,19 @@ import "encoding/binary"
 
 type FreeList struct {
 	head uint64
+	FreeListData
+	// for each transaction
+	varsion   uint64 // current version
+	minReader uint64 // minimum reader version
 	// callbacks for managing on-disk pages
 	get func(uint64) BNode  // dereference a pointer
 	new func(BNode) uint64  // append a new page
 	use func(uint64, BNode) // reuse a page
+}
+
+// the in-memory data structure that is updated and committed by transactions
+type FreeListData struct {
+	head uint64
 }
 
 // Functions for accessing the list node:
@@ -147,3 +156,9 @@ func flPush(fl *FreeList, freed []uint64, reuse []uint64) {
 
 	Assert(len(reuse) == 0, "unable to push correctly")
 }
+
+// try to remove an item from the tail. returns 0 on failure.
+// the removed pointer must not be reachable by the minimum version reader.
+func (fl *FreeList) Pop() uint64
+// add some new pointers to the head and finalize the update
+func (fl *FreeList) Add(freed []uint64)

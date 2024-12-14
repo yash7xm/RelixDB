@@ -127,3 +127,6 @@ func (kv *KV) EndRead(tx *KVReader) {
 func (tx *KVReader) pageGetMapped(ptr uint64) BNode {
 	return BNode{}
 }
+
+// func (tx *KVReader) Get(key []byte) ([]byte, bool)
+// func (tx *KVReader) Seek(key []byte, cmp int) *BIter
