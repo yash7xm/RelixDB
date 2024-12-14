@@ -31,7 +31,7 @@ func (kv *KV) Begin(tx *KVTX) {
 	tx.tree.new = tx.pageNew
 	tx.tree.del = tx.pageDel
 	// freelist
-	tx.free.FreeListData = kv.free
+	tx.free.FreeListData = kv.free.FreeListData
 	tx.free.version = kv.version
 	tx.free.get = tx.pageGet
 	tx.free.new = tx.pageAppend
@@ -82,7 +82,7 @@ func (kv *KV) Commit(tx *KVTX) error {
 	// the transaction is visible at this point.
 	// save the new version of in-memory data structures.
 	kv.page.flushed += uint64(tx.page.nappend)
-	kv.free = tx.free.FreeListData
+	kv.free = tx.free
 	kv.mu.Lock()
 	kv.tree.root = tx.tree.root
 	kv.version++
@@ -167,4 +167,12 @@ func (tx *KVTX) pageNew(node BNode) uint64 {
 
 func (tx *KVTX) pageDel(ptr uint64) {
 	tx.db.pageDel(ptr)
+}
+
+func (tx *KVTX) pageAppend(node BNode) uint64 {
+	return tx.db.pageAppend(node)
+}
+
+func (tx *KVTX) pageUse(ptr uint64, node BNode) {
+	tx.db.pageUse(ptr, node)
 }

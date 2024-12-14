@@ -25,7 +25,7 @@ type KV struct {
 		// nil value denotes a deallocated page
 		updates map[uint64][]byte
 	}
-	free   FreeList
+	free FreeList
 	mu     sync.Mutex
 	writer sync.Mutex
 	// version number and reader list
